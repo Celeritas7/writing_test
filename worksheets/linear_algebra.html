@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  ============================================================================
+  WRITTEN TEST · WORKSHEET · LINEAR ALGEBRA  ·  Editorial / Red-accent design
+  ============================================================================
+  Self-contained static page. No build step. Reads ALL problem data from
+  Supabase (written_test_problems, topic_id='linear_algebra'); never from
+  local files.
+
+  Converted from "04 Linear Algebra.dc.html" (Claude Design). All of the Design
+  templating machinery (the support script, the <x-dc> wrapper, the <sc-for>
+  loops and <sc-if> conditionals, the {{ }} interpolation braces and the
+  DCLogic class) has been stripped and replaced with real DOM rendering. The
+  original markup, classes, inline styles, screen accent (#e1322d) and the
+  @page/@media-print rules are preserved untouched so the print layout is
+  identical to the design.
+
+  Auth: shares the supabase-js v2 default localStorage session
+  (sb-<ref>-auth-token) with index.html — same project URL + anon key — so a
+  session created in the main app carries here with no re-login. Problems are
+  RLS authenticated-read, so an anonymous query returns nothing; if there is no
+  session we show a "sign in via the main app" message instead of a blank sheet.
+  ============================================================================
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<title>Linear Algebra · Worksheet · Written Test</title>
+<style>
+  /* ---- design system (verbatim from the Linear Algebra design file's helmet) ---- */
+  :root{--paper:#f5f4f0;--card:#ffffff;--ink:#121210;--soft:#46453f;--mute:#8b8a80;--rule:#121210;--rule2:#dad9d2;--accent:#e1322d;--grid:#e7e6df;}
+  *{box-sizing:border-box;}
+  body{margin:0;color:var(--ink);font-family:'Archivo',sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:var(--paper);}
+  .doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:inherit;padding:48px clamp(24px,5vw,0.7in) 96px;}
+  .doc-frame{width:100%;border-collapse:collapse;}
+  .doc-frame td{padding:0;}
+  .running-hdr,.running-ftr,.hdr-space,.ftr-space{display:none;}
+  h1,h2,h3{text-wrap:balance;}p,li{text-wrap:pretty;}
+  @page{size:letter;margin:0;}
+  @media print{
+    html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html,body{margin:0;padding:0;}
+    .doc{max-width:none !important;margin:0 !important;padding:0 0.7in !important;}
+    #dc-root,.sc-host{height:auto !important;}
+    .hdr-space,.ftr-space{display:table-cell;height:0.75in !important;}
+    .running-hdr,.running-ftr{display:flex !important;justify-content:space-between;align-items:baseline;position:fixed !important;left:0;right:0;margin:0 !important;font-family:'Space Mono',monospace;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);}
+    .running-hdr{top:0;padding:0.36in 0.7in 0 !important;}
+    .running-ftr{bottom:0;padding:0 0.7in 0.36in !important;}
+    h1,h2,h3,h4{break-after:avoid;}
+    article,.worked{break-inside:avoid;}
+    p,li{orphans:3;widows:3;}
+  }
+
+  /* ---- additive: wiring-only chrome (screen-only; never printed) ---- */
+  .screen-only{}
+  @media print{ .screen-only{display:none !important;} }
+  /* ---- additive: pure-white writable surface for PRINT (design is already light;
+         near-black --ink and red --accent print fine; --card is already #ffffff) ---- */
+  @media print{
+    :root{ --paper:#ffffff; }
+  }
+
+  /* ---- additive: wiring chrome styling, mapped onto the Linear Algebra palette ----
+     NOTE: calculus.html's chrome referenced --blue / --panel / --line, which do not
+     exist in this design's variable set. Those have been remapped to this design's
+     own --card / --paper / --rule2 / --ink so the gate / error / loading / toolbar
+     render in the Linear-Algebra skin. Screen accent stays the design's red. ------ */
+  a{color:var(--accent);}
+  button{font-family:'Space Mono',monospace;cursor:pointer;}
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:24px 0 0;}
+  .toolbar .tog{background:var(--card);color:var(--accent);border:1.5px solid var(--accent);border-radius:3px;padding:9px 18px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;}
+  .toolbar .tog:hover{background:rgba(225,50,45,0.08);}
+  .toolbar .tog.on{background:var(--accent);color:var(--card);}
+  .toolbar .hint{font-family:'Space Mono',monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);}
+  .crumb{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin:0 0 26px;}
+  .crumb a{color:var(--mute);text-decoration:none;}
+  .crumb a:hover{color:var(--accent);}
+  .crumb .sep{color:var(--rule2);}
+  .state{max-width:8.5in;margin:0 auto;padding:48px clamp(24px,5vw,0.7in);}
+  .state .card{border:2px solid var(--ink);background:var(--card);padding:34px 30px;}
+  .state .kick{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;}
+  .state h1{font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(34px,7vw,56px);line-height:0.92;letter-spacing:-1.5px;margin:0 0 14px;text-transform:uppercase;}
+  .state p{font-size:17px;color:var(--soft);margin:0 0 18px;max-width:52ch;}
+  .state .btn{display:inline-block;background:var(--accent);color:var(--card);border:none;border-radius:3px;padding:12px 22px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;}
+  .loading{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--mute);text-align:center;padding:16vh 0;text-transform:uppercase;}
+  .hide{display:none !important;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOADING ============ -->
+<div id="loading-view" class="loading">Connecting…</div>
+
+<!-- ============ SIGN-IN GATE (no session) ============ -->
+<div id="gate-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Linear Algebra</div>
+  <div class="card">
+    <div class="kick">Sheet 04 · Linear Algebra</div>
+    <h1>Sign in first</h1>
+    <p>This worksheet reads its problems from your authenticated session. You’re not signed in, so there’s nothing to show yet — sign in via the main app and come back; the session carries over automatically.</p>
+    <a class="btn" href="../index.html">Go to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ ERROR ============ -->
+<div id="error-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Linear Algebra</div>
+  <div class="card">
+    <div class="kick">Sheet 04 · Linear Algebra</div>
+    <h1>Couldn’t load</h1>
+    <p id="error-msg">Something went wrong.</p>
+    <a class="btn" href="../index.html">Back to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ WORKSHEET (converted design) ============ -->
+<main class="doc hide" id="app-view">
+  <div class="running-hdr"><span>Linear Algebra</span><span>Matrix Practice</span></div>
+  <div class="running-ftr"><span>Work by hand</span><span>Self-check with the Answer Key</span></div>
+  <table class="doc-frame" role="presentation">
+    <thead><tr><td class="hdr-space"></td></tr></thead>
+    <tbody><tr><td>
+      <div id="dc-root">
+
+      <nav class="crumb screen-only"><a href="../index.html">Written Test</a> <span class="sep">/</span> Linear Algebra</nav>
+
+      <header style="border-top:8px solid var(--ink);padding-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:280px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+              <span style="width:13px;height:13px;background:var(--accent);display:inline-block;"></span>
+              <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--ink);">04 / Linear Algebra</span>
+            </div>
+            <h1 style="font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(46px,8.5vw,84px);line-height:0.88;letter-spacing:-2.5px;margin:0;color:var(--ink);text-transform:uppercase;">Linear<br/>Algebra</h1>
+            <p style="font-size:18px;color:var(--soft);margin:18px 0 0;max-width:42ch;font-weight:500;">Systems, determinants and eigenvalues — small matrices worked entirely by hand.</p>
+          </div>
+          <div style="flex-shrink:0;"><svg width="150" height="150" viewBox="0 0 150 150" fill="none"><path d="M22 26 L12 26 L12 124 L22 124" stroke="#121210" stroke-width="3" fill="none"/><path d="M128 26 L138 26 L138 124 L128 124" stroke="#121210" stroke-width="3" fill="none"/><text x="40" y="62" font-family="Space Mono, monospace" font-size="30" font-weight="700" fill="#121210">2</text><text x="84" y="62" font-family="Space Mono, monospace" font-size="30" font-weight="700" fill="#e1322d">1</text><text x="40" y="104" font-family="Space Mono, monospace" font-size="30" font-weight="700" fill="#e1322d">1</text><text x="84" y="104" font-family="Space Mono, monospace" font-size="30" font-weight="700" fill="#121210">1</text></svg></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0;margin-top:24px;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);font-family:'Space Mono',monospace;">
+          <div style="padding:8px 18px 8px 0;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);">Problems&nbsp;<b style="color:var(--accent);" id="stat-count">—</b></div>
+          <div style="padding:8px 18px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);border-left:1px solid var(--rule2);">Worked&nbsp;<b style="color:var(--accent);" id="stat-worked">—</b></div>
+          <div style="padding:8px 18px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);border-left:1px solid var(--rule2);">Mode&nbsp;<b style="color:var(--accent);">By Hand</b></div>
+        </div>
+      </header>
+
+      <!-- toggle: wiring chrome, never printed -->
+      <div class="toolbar screen-only">
+        <button type="button" class="tog" id="toggle-key" aria-pressed="false">Show answer key</button>
+        <span class="hint">Off = practice sheet · On = answer key — both print clean</span>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:14px;margin:36px 0 10px;border-bottom:2px solid var(--ink);padding-bottom:8px;">
+        <span style="font-family:'Archivo',sans-serif;font-weight:900;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--ink);">Practice</span>
+        <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">FILL BY HAND</span>
+        <span style="margin-left:auto;width:13px;height:13px;background:var(--accent);"></span>
+      </div>
+
+      <!-- practice problems rendered here -->
+      <div id="problems-host"></div>
+
+      <!-- answer key (hidden by default; toggled) -->
+      <section id="answerkey-section" class="hide">
+        <div style="display:flex;align-items:baseline;gap:14px;margin:40px 0 16px;border-bottom:2px solid var(--ink);padding-bottom:8px;">
+          <span style="font-family:'Archivo',sans-serif;font-weight:900;font-size:15px;letter-spacing:1px;text-transform:uppercase;color:var(--ink);">Answer Key</span>
+          <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">SELF-CHECK</span>
+          <span style="margin-left:auto;width:13px;height:13px;background:var(--accent);"></span>
+        </div>
+        <div id="answerkey-host"></div>
+      </section>
+
+      <footer style="margin-top:26px;padding-top:14px;border-top:8px solid var(--ink);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--mute);text-transform:uppercase;">
+        <span style="color:var(--soft);">Eliminate, substitute, then check both equations.</span>
+        <span>04 — Linear Algebra</span>
+      </footer>
+
+      </div>
+    </td></tr></tbody>
+    <tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+  </table>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- Supabase client (shared session: same URL + anon key as index.html) ----
+  const SUPABASE_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ---- DOM helpers ----
+  const $ = (id) => document.getElementById(id);
+  const show = (el) => el.classList.remove("hide");
+  const hideEl = (el) => el.classList.add("hide");
+  const pad2 = (n) => String(n).padStart(2, "0");
+
+  // Build a styled element; dynamic text is set via textContent (never innerHTML),
+  // so DB values can never inject markup.
+  const el = (tag, style, text) => {
+    const n = document.createElement(tag);
+    if (style) n.setAttribute("style", style);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  // ---- work-area templates (from the design's `std` step list) ----
+  // These are static, empty styled divs — no dynamic data ever flows into them.
+  // The hardcoded red ruled/margin line in the grid is left exactly as designed.
+  const GRID_STYLE = "min-height:200px;border:1.5px solid var(--ink);padding-left:30px;background-color:var(--card);background-image:linear-gradient(90deg,transparent 21px,rgba(225,50,45,0.5) 21px,rgba(225,50,45,0.5) 22.5px,transparent 22.5px),linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100% 100%,22px 22px,22px 22px;background-repeat:no-repeat,repeat,repeat;";
+  const LINES_STYLE = "height:58px;border-bottom:1px solid var(--rule2);background-image:repeating-linear-gradient(transparent 0 28px,var(--rule2) 28px 29px);";
+
+  const STD_STEPS = [
+    { n: "1", label: "Given", hint: "restate what is asked", kind: "lines" },
+    { n: "2", label: "Method / formula", hint: "name the rule you will use", kind: "lines" },
+    { n: "3", label: "Work area", hint: "do the calculation step by step", kind: "grid" },
+    { n: "4", label: "Answer", hint: "state the result", kind: "lines" },
+    { n: "5", label: "Check", hint: "verify / sanity-check", kind: "lines" },
+  ];
+
+  function stepNode(s) {
+    const li = el("li");
+    const head = el("div", "display:flex;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap;");
+    head.appendChild(el("span", "font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);", s.n));
+    head.appendChild(el("span", "font-family:'Archivo',sans-serif;font-size:15px;font-weight:800;color:var(--ink);white-space:nowrap;text-transform:uppercase;letter-spacing:-0.2px;", s.label));
+    head.appendChild(el("span", "font-family:'Space Mono',monospace;font-size:10px;font-style:italic;color:var(--mute);", s.hint));
+    li.appendChild(head);
+    li.appendChild(el("div", s.kind === "grid" ? GRID_STYLE : LINES_STYLE));
+    return li;
+  }
+
+  // ---- one practice problem (the design's `problems` <article>) ----
+  function problemNode(p, total) {
+    const article = el("article", "margin-bottom:8px;border-bottom:1px solid var(--rule2);padding:22px 0;display:grid;grid-template-columns:92px 1fr;gap:8px;");
+
+    const numCell = el("div", "grid-row:span 2;");
+    numCell.appendChild(el("div", "font-family:'Archivo',sans-serif;font-weight:900;font-size:62px;line-height:0.82;color:var(--accent);letter-spacing:-3px;", String(p.number)));
+    numCell.appendChild(el("div", "font-family:'Space Mono',monospace;font-size:10px;color:var(--mute);letter-spacing:1px;", "/ " + pad2(total)));
+    article.appendChild(numCell);
+
+    const content = el("div");
+    content.appendChild(el("div", "font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink);margin-bottom:8px;", p.subtitle));
+    content.appendChild(el("p", "font-size:18px;color:var(--ink);margin:0 0 12px;font-weight:500;", p.prompt));
+
+    if (p.given_data) {
+      const given = el("div", "font-family:'Space Mono',monospace;font-size:12.5px;color:var(--ink);background:var(--paper);border:1px solid var(--rule2);padding:10px 14px;white-space:pre-line;line-height:1.6;");
+      given.appendChild(el("span", "color:var(--accent);font-weight:700;", "GIVEN  "));
+      given.appendChild(document.createTextNode(p.given_data)); // textContent path — no markup injection
+      content.appendChild(given);
+    }
+
+    const ol = el("ol", "list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:15px;");
+    STD_STEPS.forEach((s) => ol.appendChild(stepNode(s)));
+    content.appendChild(ol);
+    article.appendChild(content);
+    return article;
+  }
+
+  // ---- one answer-key card (reuses the design's `.worked` reference look) ----
+  // Dynamic values are set via textContent / createTextNode (never innerHTML);
+  // the answer/worked bodies use white-space:pre-wrap so newlines stored in the
+  // DB render as line breaks.
+  function keyLine(label, body, pending) {
+    const row = el("div", "display:flex;gap:18px;padding:10px 0;border-top:1px solid var(--rule2);");
+    row.appendChild(el(
+      "span",
+      "font-family:'Space Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);min-width:78px;flex-shrink:0;padding-top:3px;",
+      label
+    ));
+    const bodyStyle = (pending
+      ? "color:var(--mute);font-style:italic;"
+      : "color:var(--soft);") +
+      "font-family:'Space Mono',monospace;font-size:13px;white-space:pre-wrap;line-height:1.7;";
+    row.appendChild(el("span", bodyStyle, body)); // textContent — \n -> line breaks via pre-wrap
+    return row;
+  }
+
+  function keyCard(p) {
+    const solved = p.answer != null && String(p.answer).trim() !== "";
+
+    const card = el("div", "margin-bottom:8px;border:2px solid var(--ink);background:var(--card);");
+    card.className = "worked";
+
+    // header row: № · status · subtitle
+    const head = el("div", "display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--ink);");
+    head.appendChild(el("span", "font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--card);background:var(--accent);padding:10px 18px;", "№ " + pad2(p.number)));
+    head.appendChild(solved
+      ? el("span", "font-family:'Space Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--card);background:var(--accent);padding:2px 8px;", "Solved")
+      : el("span", "font-family:'Space Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--mute);border:1px solid var(--rule2);padding:2px 8px;", "Pending"));
+    head.appendChild(el("span", "margin-left:auto;font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:var(--ink);text-transform:uppercase;letter-spacing:-0.5px;padding-right:16px;", p.subtitle));
+    card.appendChild(head);
+
+    // body: prompt · given · answer · worked
+    const body = el("div", "padding:20px 22px;");
+    body.appendChild(el("p", "font-size:16px;color:var(--ink);margin:0 0 12px;font-weight:500;", p.prompt));
+
+    if (p.given_data) {
+      const given = el("div", "font-family:'Space Mono',monospace;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--rule2);padding:10px 14px;margin-bottom:6px;white-space:pre-wrap;line-height:1.6;");
+      given.appendChild(el("span", "color:var(--accent);font-weight:700;", "GIVEN  "));
+      given.appendChild(document.createTextNode(p.given_data));
+      body.appendChild(given);
+    }
+
+    body.appendChild(solved ? keyLine("Answer", p.answer, false) : keyLine("Answer", "— pending —", true));
+    if (p.worked != null && String(p.worked).trim() !== "") {
+      body.appendChild(keyLine("Worked", p.worked, false));
+    }
+    card.appendChild(body);
+
+    return card;
+  }
+
+  // =====================================================================
+  // RENDER + LOAD
+  // =====================================================================
+  function render(problems) {
+    const total = problems.length;
+
+    const host = $("problems-host");
+    host.innerHTML = ""; // clear container (no dynamic data injected)
+    problems.forEach((p) => host.appendChild(problemNode(p, total)));
+
+    const keyHost = $("answerkey-host");
+    keyHost.innerHTML = "";
+    problems.forEach((p) => keyHost.appendChild(keyCard(p)));
+
+    $("stat-count").textContent = pad2(total);
+    const worked = problems.filter((p) => p.worked != null && String(p.worked).trim() !== "").length;
+    $("stat-worked").textContent = pad2(worked);
+  }
+
+  async function loadLinearAlgebra() {
+    const { data, error } = await sb
+      .from("written_test_problems")
+      .select("*")
+      .eq("topic_id", "linear_algebra")
+      .order("number");
+    if (error) throw error;
+    return data || [];
+  }
+
+  // ---- answer-key toggle ----
+  $("toggle-key").addEventListener("click", () => {
+    const sec = $("answerkey-section");
+    const btn = $("toggle-key");
+    const showing = sec.classList.toggle("hide") === false; // toggle returns true if 'hide' now present
+    btn.classList.toggle("on", showing);
+    btn.setAttribute("aria-pressed", String(showing));
+    btn.textContent = showing ? "Hide answer key" : "Show answer key";
+  });
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  async function boot(session) {
+    // Injected-rows guard: if a row array is supplied on window.__ROWS__,
+    // render it directly — no auth, no session check, no Supabase query.
+    if (Array.isArray(window.__ROWS__)) {
+      hideEl($("gate-view")); hideEl($("error-view")); hideEl($("loading-view"));
+      render(window.__ROWS__);
+      show($("app-view"));
+      return;
+    }
+    if (!session) {
+      hideEl($("loading-view")); hideEl($("app-view")); hideEl($("error-view"));
+      show($("gate-view"));
+      return;
+    }
+    hideEl($("gate-view")); hideEl($("error-view")); hideEl($("app-view"));
+    show($("loading-view"));
+    try {
+      const problems = await loadLinearAlgebra();
+      render(problems);
+      hideEl($("loading-view"));
+      show($("app-view"));
+    } catch (e) {
+      hideEl($("loading-view"));
+      $("error-msg").textContent = "Couldn’t load the worksheet: " + (e.message || e);
+      show($("error-view"));
+    }
+  }
+
+  // React to session changes (covers magic-link return + sign-in/out)
+  let booted = false;
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session && !booted) { booted = true; boot(session); }
+    else if (!session) { booted = false; boot(null); }
+  });
+
+  // Initial check
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) { if (!booted) { booted = true; boot(data.session); } }
+    else { boot(null); }
+  });
+})();
+</script>
+</body>
+</html>

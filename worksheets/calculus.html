@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  ============================================================================
+  WRITTEN TEST · WORKSHEET · CALCULUS  ·  Command Centre / Drawing-Set design
+  ============================================================================
+  Self-contained static page. No build step. Reads ALL problem data from
+  Supabase (written_test_problems, topic_id='calculus'); never from local files.
+
+  Converted from "03 Calculus.dc.html" (Claude Design). All of the Design
+  templating machinery (the support script, the component wrapper, the loop and
+  conditional elements, the interpolation braces and the logic class) has been
+  stripped and replaced with real DOM rendering. The original markup, classes,
+  inline styles and the @page/@media-print rules are preserved untouched so the
+  print layout is identical.
+
+  Auth: shares the supabase-js v2 default localStorage session
+  (sb-<ref>-auth-token) with index.html — same project URL + anon key — so a
+  session created in the main app carries here with no re-login. Problems are
+  RLS authenticated-read, so an anonymous query returns nothing; if there is no
+  session we show a "sign in via the main app" message instead of a blank sheet.
+  ============================================================================
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<title>Calculus · Worksheet · Written Test</title>
+<style>
+  /* ---- design system (verbatim from the Calculus design file's helmet) ---- */
+  :root{--blue:#0e2a47;--blue2:#143458;--panel:#0c2440;--ink:#eaf3fb;--soft:#b7cce1;--mute:#7e9bbb;--line:rgba(150,200,235,0.24);--accent:#6fd0e8;--grid:rgba(120,170,210,0.14);}
+  *{box-sizing:border-box;}
+  body{margin:0;color:var(--ink);font-family:'IBM Plex Sans',sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact;background-color:var(--blue);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px),radial-gradient(circle at 50% 0%,rgba(111,208,232,0.07) 0%,rgba(0,0,0,0) 50%);
+    background-size:26px 26px,26px 26px,100% 100%;}
+  .doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:transparent;padding:48px clamp(24px,5vw,0.7in) 96px;}
+  .doc-frame{width:100%;border-collapse:collapse;}
+  .doc-frame td{padding:0;}
+  .running-hdr,.running-ftr,.hdr-space,.ftr-space{display:none;}
+  h1,h2,h3{text-wrap:balance;}p,li{text-wrap:pretty;}
+  @page{size:letter;margin:0;}
+  @media print{
+    html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html,body{margin:0;padding:0;}
+    .doc{max-width:none !important;margin:0 !important;padding:0 0.7in !important;}
+    #dc-root,.sc-host{height:auto !important;}
+    .hdr-space,.ftr-space{display:table-cell;height:0.75in !important;}
+    .running-hdr,.running-ftr{display:flex !important;justify-content:space-between;align-items:baseline;position:fixed !important;left:0;right:0;margin:0 !important;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);}
+    .running-hdr{top:0;padding:0.36in 0.7in 0 !important;}
+    .running-ftr{bottom:0;padding:0 0.7in 0.36in !important;}
+    h1,h2,h3,h4{break-after:avoid;}
+    article,.worked{break-inside:avoid;}
+    p,li{orphans:3;widows:3;}
+  }
+
+  /* ---- additive: wiring-only chrome (screen-only; never printed) ---- */
+  .screen-only{}
+  @media print{ .screen-only{display:none !important;} }
+  /* ---- additive: white / writable theme for PRINT only (screen stays dark) ---- */
+  @media print{
+    :root{
+      --blue:#ffffff; --blue2:#ffffff; --panel:#ffffff;
+      --ink:#14202c; --soft:#2e3a44; --mute:#5d6770;
+      --line:rgba(14,42,71,0.32); --accent:#0e2a47; --grid:rgba(14,42,71,0.06);
+    }
+  }
+  a{color:var(--accent);}
+  button{font-family:'IBM Plex Mono',monospace;cursor:pointer;}
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:30px 0 0;}
+  .toolbar .tog{background:var(--panel);color:var(--accent);border:1.5px solid var(--accent);border-radius:3px;padding:9px 18px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;}
+  .toolbar .tog:hover{background:rgba(111,208,232,0.12);}
+  .toolbar .tog.on{background:var(--accent);color:var(--blue);}
+  .toolbar .hint{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);}
+  .crumb{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin:0 0 26px;}
+  .crumb a{color:var(--mute);text-decoration:none;}
+  .crumb a:hover{color:var(--accent);}
+  .crumb .sep{color:var(--line);}
+  .state{max-width:8.5in;margin:0 auto;padding:48px clamp(24px,5vw,0.7in);}
+  .state .card{border:1.5px solid var(--line);background:var(--panel);padding:34px 30px;}
+  .state .kick{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;}
+  .state h1{font-family:'Archivo',sans-serif;font-weight:800;font-size:clamp(34px,7vw,56px);line-height:0.95;letter-spacing:-1.5px;margin:0 0 14px;text-transform:uppercase;}
+  .state p{font-size:17px;color:var(--soft);margin:0 0 18px;max-width:52ch;}
+  .state .btn{display:inline-block;background:var(--accent);color:var(--blue);border:none;border-radius:3px;padding:12px 22px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;}
+  .loading{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--mute);text-align:center;padding:16vh 0;text-transform:uppercase;}
+  .hide{display:none !important;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOADING ============ -->
+<div id="loading-view" class="loading">Connecting…</div>
+
+<!-- ============ SIGN-IN GATE (no session) ============ -->
+<div id="gate-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Calculus</div>
+  <div class="card">
+    <div class="kick">Sheet 03 · Calculus</div>
+    <h1>Sign in first</h1>
+    <p>This worksheet reads its problems from your authenticated session. You’re not signed in, so there’s nothing to show yet — sign in via the main app and come back; the session carries over automatically.</p>
+    <a class="btn" href="../index.html">Go to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ ERROR ============ -->
+<div id="error-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Calculus</div>
+  <div class="card">
+    <div class="kick">Sheet 03 · Calculus</div>
+    <h1>Couldn’t load</h1>
+    <p id="error-msg">Something went wrong.</p>
+    <a class="btn" href="../index.html">Back to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ WORKSHEET (converted design) ============ -->
+<main class="doc hide" id="app-view">
+  <div class="running-hdr"><span>Calculus · Drawing Set</span><span>Derivatives &amp; Integrals</span></div>
+  <div class="running-ftr"><span>Derive by hand</span><span>Self-check with the Answer Key</span></div>
+  <table class="doc-frame" role="presentation">
+    <thead><tr><td class="hdr-space"></td></tr></thead>
+    <tbody><tr><td>
+      <div id="dc-root">
+
+      <nav class="crumb screen-only"><a href="../index.html">Written Test</a> <span class="sep">/</span> Calculus</nav>
+
+      <header style="border:1.5px solid var(--line);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;padding:24px 26px;border-bottom:1.5px solid var(--line);">
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Sheet 03 · The Calculus of Change</div>
+            <h1 style="font-family:'Archivo',sans-serif;font-weight:800;font-size:clamp(48px,9vw,88px);line-height:0.9;letter-spacing:-2px;margin:0;color:var(--ink);text-transform:uppercase;">Calculus</h1>
+            <p style="font-size:18px;color:var(--soft);margin:14px 0 0;max-width:46ch;">The mathematics of change — limits, derivatives and integrals, derived term by term and drawn on the grid.</p>
+          </div>
+          <div style="flex-shrink:0;"><svg width="168" height="150" viewBox="0 0 168 150" fill="none"><line x1="18" y1="120" x2="156" y2="120" stroke="#b7cce1" stroke-width="1.2"/><line x1="34" y1="20" x2="34" y2="134" stroke="#b7cce1" stroke-width="1.2"/><path d="M34 120 Q92 8 150 120" stroke="#6fd0e8" stroke-width="2.4" fill="none"/><line x1="60" y1="96" x2="138" y2="44" stroke="#eaf3fb" stroke-width="1.4" stroke-dasharray="5 4"/><circle cx="99" cy="70" r="3.6" fill="#6fd0e8"/><line x1="99" y1="70" x2="99" y2="120" stroke="#6fd0e8" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/></svg></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);font-family:'IBM Plex Mono',monospace;">
+          <div style="padding:9px 14px;border-right:1.5px solid var(--line);"><div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);">Set</div><div style="font-size:14px;font-weight:600;color:var(--ink);">CALC-03</div></div>
+          <div style="padding:9px 14px;border-right:1.5px solid var(--line);"><div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);">Details</div><div style="font-size:14px;font-weight:600;color:var(--ink);" id="stat-details">—</div></div>
+          <div style="padding:9px 14px;border-right:1.5px solid var(--line);"><div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);">Worked</div><div style="font-size:14px;font-weight:600;color:var(--ink);" id="stat-worked">—</div></div>
+          <div style="padding:9px 14px;"><div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);">Mode</div><div style="font-size:14px;font-weight:600;color:var(--accent);">BY HAND</div></div>
+        </div>
+      </header>
+
+      <!-- toggle: wiring chrome, never printed -->
+      <div class="toolbar screen-only">
+        <button type="button" class="tog" id="toggle-key" aria-pressed="false">Show answer key</button>
+        <span class="hint">Off = practice sheet · On = answer key — both print clean</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:14px;margin:34px 0 20px;">
+        <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--ink);">Details · Practice</span>
+        <span style="flex:1;height:1.5px;background:var(--accent);"></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">DERIVE ON GRID</span>
+      </div>
+
+      <!-- practice problems rendered here -->
+      <div id="problems-host"></div>
+
+      <!-- answer key (hidden by default; toggled) -->
+      <section id="answerkey-section" class="hide">
+        <div style="display:flex;align-items:center;gap:14px;margin:40px 0 20px;">
+          <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--ink);">Answer Key</span>
+          <span style="flex:1;height:1.5px;background:var(--accent);"></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">SELF-CHECK</span>
+        </div>
+        <div id="answerkey-host"></div>
+      </section>
+
+      <footer style="margin-top:32px;padding:14px 0 0;border-top:1.5px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--mute);">
+        <span style="color:var(--soft);">“Derive it by hand, then plot it.”</span>
+        <span>SHEET 03 · CALCULUS</span>
+      </footer>
+
+      </div>
+    </td></tr></tbody>
+    <tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+  </table>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- Supabase client (shared session: same URL + anon key as index.html) ----
+  const SUPABASE_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ---- DOM helpers ----
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const show = (el) => el.classList.remove("hide");
+  const hideEl = (el) => el.classList.add("hide");
+
+  // ---- work-area templates (from the design's `std` step list) ----
+  // ruled-lines block
+  const linesBlock = () =>
+    `<div style="height:58px;background-image:repeating-linear-gradient(transparent 0 28px,var(--line) 28px 29px);"></div>`;
+  // graph-grid work area
+  const gridBlock = () =>
+    `<div style="min-height:200px;border:1px solid var(--line);padding-left:30px;background-color:rgba(255,255,255,0.02);background-image:linear-gradient(90deg,transparent 21px,rgba(111,208,232,0.45) 21px,rgba(111,208,232,0.45) 22px,transparent 22px),linear-gradient(rgba(120,170,210,0.22) 1px,transparent 1px),linear-gradient(90deg,rgba(120,170,210,0.22) 1px,transparent 1px),linear-gradient(rgba(120,170,210,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(120,170,210,0.1) 1px,transparent 1px);background-size:100% 100%,104px 104px,104px 104px,26px 26px,26px 26px;background-repeat:no-repeat,repeat,repeat,repeat,repeat;"></div>`;
+
+  const STD_STEPS = [
+    { n: "1", label: "Given", hint: "restate what is asked", kind: "lines" },
+    { n: "2", label: "Method / formula", hint: "name the rule you will use", kind: "lines" },
+    { n: "3", label: "Work area", hint: "do the calculation step by step", kind: "grid" },
+    { n: "4", label: "Answer", hint: "state the result", kind: "lines" },
+    { n: "5", label: "Check", hint: "verify / sanity-check", kind: "lines" },
+  ];
+
+  function stepHTML(s) {
+    const area = s.kind === "grid" ? gridBlock() : linesBlock();
+    return `<li>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap;">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);">${esc(s.n)}</span>
+        <span style="font-family:'Archivo',sans-serif;font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;text-transform:uppercase;letter-spacing:0.2px;">${esc(s.label)}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-style:italic;color:var(--mute);">${esc(s.hint)}</span>
+      </div>
+      ${area}
+    </li>`;
+  }
+
+  // ---- one practice problem (the design's `problems` <article>) ----
+  function problemHTML(p, total) {
+    const steps = STD_STEPS.map(stepHTML).join("");
+    const given = p.given_data
+      ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);border:1px solid var(--line);border-radius:3px;padding:9px 13px;white-space:pre-line;line-height:1.6;"><span style="font-weight:700;">GIVEN&nbsp;&nbsp;</span>${esc(p.given_data)}</div>`
+      : "";
+    return `<article style="margin-bottom:20px;border:1.5px solid var(--line);background:var(--panel);">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:12px 22px;border-bottom:1.5px solid var(--line);">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);">Detail ${esc(p.number)} / ${esc(total)}</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);text-align:right;">${esc(p.subtitle)}</span>
+      </div>
+      <div style="padding:18px 22px;">
+        <p style="font-size:17px;color:var(--ink);margin:0 0 12px;">${esc(p.prompt)}</p>
+        ${given}
+        <ol style="list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:15px;">
+          ${steps}
+        </ol>
+      </div>
+    </article>`;
+  }
+
+  // ---- one answer-key card (reuses the design's `.worked` reference-detail look) ----
+  // Built as real DOM nodes: dynamic values are set via textContent (never
+  // innerHTML), and the answer/worked bodies use white-space:pre-wrap so the
+  // newlines stored in the DB render as line breaks.
+  const el = (tag, style, text) => {
+    const n = document.createElement(tag);
+    if (style) n.setAttribute("style", style);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  function keyLine(label, body, pending) {
+    const row = el("div", "display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--line);");
+    row.appendChild(el(
+      "span",
+      "font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);min-width:84px;flex-shrink:0;padding-top:3px;",
+      label
+    ));
+    const bodyStyle = (pending
+      ? "color:var(--mute);font-style:italic;"
+      : "color:var(--soft);") +
+      "font-family:'IBM Plex Mono',monospace;font-size:13px;white-space:pre-wrap;line-height:1.7;";
+    row.appendChild(el("span", bodyStyle, body)); // textContent — \n -> line breaks via pre-wrap
+    return row;
+  }
+
+  function keyCard(p) {
+    const solved = p.answer != null && String(p.answer).trim() !== "";
+
+    const card = el("div", "margin-top:0;margin-bottom:20px;border:1.5px solid var(--accent);background:var(--panel);");
+    card.className = "worked";
+
+    // header row: № · tag · subtitle
+    const head = el("div", "display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 22px;border-bottom:1.5px solid var(--line);background:rgba(111,208,232,0.08);");
+    head.appendChild(el("span", "font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);", "№ " + p.number));
+    head.appendChild(solved
+      ? el("span", "font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--blue);background:var(--accent);border-radius:2px;padding:2px 8px;", "Solved")
+      : el("span", "font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mute);border:1px solid var(--line);border-radius:2px;padding:2px 8px;", "Pending"));
+    head.appendChild(el("span", "margin-left:auto;font-family:'Archivo',sans-serif;font-weight:700;font-size:18px;color:var(--ink);text-transform:uppercase;letter-spacing:-0.3px;", p.subtitle));
+    card.appendChild(head);
+
+    // body: prompt · given · answer · worked
+    const body = el("div", "padding:20px 22px;");
+    body.appendChild(el("p", "font-size:16px;color:var(--ink);margin:0 0 12px;", p.prompt));
+
+    if (p.given_data) {
+      const given = el("div", "font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--accent);border:1px solid var(--line);border-radius:3px;padding:9px 13px;margin-bottom:6px;white-space:pre-wrap;line-height:1.6;");
+      given.appendChild(el("span", "font-weight:700;", "GIVEN  "));
+      given.appendChild(document.createTextNode(p.given_data));
+      body.appendChild(given);
+    }
+
+    body.appendChild(solved ? keyLine("Answer", p.answer, false) : keyLine("Answer", "— pending —", true));
+    if (p.worked != null && String(p.worked).trim() !== "") {
+      body.appendChild(keyLine("Worked", p.worked, false));
+    }
+    card.appendChild(body);
+
+    return card;
+  }
+
+  // =====================================================================
+  // RENDER + LOAD
+  // =====================================================================
+  function render(problems) {
+    const total = problems.length;
+    $("problems-host").innerHTML = problems.map((p) => problemHTML(p, total)).join("");
+    const keyHost = $("answerkey-host");
+    keyHost.innerHTML = "";
+    problems.forEach((p) => keyHost.appendChild(keyCard(p)));
+    $("stat-details").textContent = total;
+    const worked = problems.filter((p) => p.worked != null && String(p.worked).trim() !== "").length;
+    $("stat-worked").textContent = worked;
+  }
+
+  async function loadCalculus() {
+    const { data, error } = await sb
+      .from("written_test_problems")
+      .select("*")
+      .eq("topic_id", "calculus")
+      .order("number");
+    if (error) throw error;
+    return data || [];
+  }
+
+  // ---- answer-key toggle ----
+  $("toggle-key").addEventListener("click", () => {
+    const sec = $("answerkey-section");
+    const btn = $("toggle-key");
+    const showing = sec.classList.toggle("hide") === false; // toggle returns true if 'hide' now present
+    btn.classList.toggle("on", showing);
+    btn.setAttribute("aria-pressed", String(showing));
+    btn.textContent = showing ? "Hide answer key" : "Show answer key";
+  });
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  async function boot(session) {
+    // Injected-rows guard: if a row array is supplied on window.__ROWS__,
+    // render it directly — no auth, no session check, no Supabase query.
+    if (Array.isArray(window.__ROWS__)) {
+      hideEl($("gate-view")); hideEl($("error-view")); hideEl($("loading-view"));
+      render(window.__ROWS__);
+      show($("app-view"));
+      return;
+    }
+    if (!session) {
+      hideEl($("loading-view")); hideEl($("app-view")); hideEl($("error-view"));
+      show($("gate-view"));
+      return;
+    }
+    hideEl($("gate-view")); hideEl($("error-view")); hideEl($("app-view"));
+    show($("loading-view"));
+    try {
+      const problems = await loadCalculus();
+      render(problems);
+      hideEl($("loading-view"));
+      show($("app-view"));
+    } catch (e) {
+      hideEl($("loading-view"));
+      $("error-msg").textContent = "Couldn’t load the worksheet: " + (e.message || e);
+      show($("error-view"));
+    }
+  }
+
+  // React to session changes (covers magic-link return + sign-in/out)
+  let booted = false;
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session && !booted) { booted = true; boot(session); }
+    else if (!session) { booted = false; boot(null); }
+  });
+
+  // Initial check
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) { if (!booted) { booted = true; boot(data.session); } }
+    else { boot(null); }
+  });
+})();
+</script>
+</body>
+</html>

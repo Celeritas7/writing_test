@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  ============================================================================
+  WRITTEN TEST · WORKSHEET · APTITUDE  ·  Editorial / Rust-accent design
+  ============================================================================
+  Self-contained static page. No build step. Reads ALL problem data from
+  Supabase (written_test_problems, topic_id='aptitude'); never from local files.
+
+  Converted from "01 Aptitude.dc.html" (Claude Design). All of the Design
+  templating machinery (support.js, the <x-dc> wrapper, the <sc-for> loops and
+  <sc-if> conditionals, the {{ }} interpolation braces and the DCLogic script
+  block) has been stripped and replaced with real DOM rendering. The original
+  markup, classes, inline styles, fonts, the compass SVG figure and the
+  @page/@media-print rules are preserved untouched so the print layout is
+  identical to the design.
+
+  Auth: shares the supabase-js v2 default localStorage session
+  (sb-<ref>-auth-token) with index.html — same project URL + anon key — so a
+  session created in the main app carries here with no re-login. Problems are
+  RLS authenticated-read, so an anonymous query returns nothing; if there is no
+  session we show a "sign in via the main app" message instead of a blank sheet.
+
+  The average-speed (harmonic-mean) WORKED EXAMPLE is kept as STATIC markup from
+  the design — it is a teaching example, NOT a row in the database.
+  ============================================================================
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Spline+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<title>Aptitude · Worksheet · Written Test</title>
+<style>
+  /* ---- design system (verbatim from the Aptitude design file's helmet) ---- */
+  :root{--bg:#f4efe3;--bg2:#faf6ec;--card:#fbf8ef;--ink:#221f18;--soft:#56503f;--mute:#8c8169;--rule:#ddd2bb;--rule2:#e9e0cc;--accent:#b5532a;--accent2:#2f6b5e;--grid:#e4ddc9;}
+  *{box-sizing:border-box;}
+  body{margin:0;color:var(--ink);font-family:'Spectral',Georgia,serif;font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact;background-color:var(--bg);background-image:radial-gradient(circle at 88% 4%,rgba(181,83,42,0.06) 0%,rgba(181,83,42,0) 40%);}
+  .doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:inherit;padding:48px clamp(24px,5vw,0.75in) 96px;}
+  .doc-frame{width:100%;border-collapse:collapse;}
+  .doc-frame td{padding:0;}
+  .running-hdr,.running-ftr,.hdr-space,.ftr-space{display:none;}
+  h1,h2,h3{text-wrap:balance;}p,li{text-wrap:pretty;}
+  @page{size:letter;margin:0;}
+  @media print{
+    html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    html,body{margin:0;padding:0;}
+    .doc{max-width:none !important;margin:0 !important;padding:0 0.7in !important;}
+    #dc-root,.sc-host{height:auto !important;}
+    .hdr-space,.ftr-space{display:table-cell;height:0.75in !important;}
+    .running-hdr,.running-ftr{display:flex !important;justify-content:space-between;align-items:baseline;position:fixed !important;left:0;right:0;margin:0 !important;font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);}
+    .running-hdr{top:0;padding:0.36in 0.7in 0 !important;}
+    .running-ftr{bottom:0;padding:0 0.7in 0.36in !important;}
+    h1,h2,h3,h4{break-after:avoid;}
+    article,.worked{break-inside:avoid;}
+    p,li{orphans:3;widows:3;}
+  }
+
+  /* ---- additive: wiring-only chrome (screen-only; never printed) ---- */
+  .screen-only{}
+  @media print{ .screen-only{display:none !important;} }
+  /* ---- additive: print on plain white paper. The accent #b5532a and ink
+         #221f18 already read fine on white, so only the page background is
+         lifted to white; the cream --card / --bg2 boxes stay as designed. ---- */
+  @media print{
+    :root{ --bg:#ffffff; }
+    body{ background-image:none; }
+  }
+
+  /* ---- additive: wiring chrome styling, mapped onto the Aptitude palette ----
+     NOTE: the sibling worksheets' chrome referenced --blue / --panel / --line,
+     which do not exist in this design's variable set. Those are remapped here to
+     this design's own --card / --bg2 / --rule / --rule2 / --ink so the gate /
+     error / loading / toolbar render in the Aptitude skin. Accent stays the
+     design's rust. ---------------------------------------------------------- */
+  a{color:var(--accent);}
+  button{font-family:'Spline Sans Mono',monospace;cursor:pointer;}
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:24px 0 0;}
+  .toolbar .tog{background:var(--card);color:var(--accent);border:1.5px solid var(--accent);border-radius:4px;padding:9px 18px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;}
+  .toolbar .tog:hover{background:rgba(181,83,42,0.08);}
+  .toolbar .tog.on{background:var(--accent);color:#fbf8ef;}
+  .toolbar .hint{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);}
+  .crumb{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin:0 0 26px;}
+  .crumb a{color:var(--mute);text-decoration:none;}
+  .crumb a:hover{color:var(--accent);}
+  .crumb .sep{color:var(--rule);}
+  .state{max-width:8.5in;margin:0 auto;padding:48px clamp(24px,5vw,0.75in);}
+  .state .card{border:1px solid var(--rule);border-radius:6px;background:var(--card);padding:34px 30px;}
+  .state .kick{font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;}
+  .state h1{font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:clamp(34px,7vw,56px);line-height:0.92;letter-spacing:-1.5px;margin:0 0 14px;}
+  .state p{font-family:'Spectral',Georgia,serif;font-size:18px;color:var(--soft);margin:0 0 18px;max-width:52ch;}
+  .state .btn{display:inline-block;background:var(--accent);color:#fbf8ef;border:none;border-radius:4px;padding:12px 22px;font-family:'Spline Sans Mono',monospace;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;}
+  .loading{font-family:'Spline Sans Mono',monospace;font-size:12px;letter-spacing:1.5px;color:var(--mute);text-align:center;padding:16vh 0;text-transform:uppercase;}
+  .hide{display:none !important;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOADING ============ -->
+<div id="loading-view" class="loading">Connecting…</div>
+
+<!-- ============ SIGN-IN GATE (no session) ============ -->
+<div id="gate-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Aptitude</div>
+  <div class="card">
+    <div class="kick">Section 01 · Aptitude</div>
+    <h1>Sign in first</h1>
+    <p>This worksheet reads its problems from your authenticated session. You’re not signed in, so there’s nothing to show yet — sign in via the main app and come back; the session carries over automatically.</p>
+    <a class="btn" href="../index.html">Go to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ ERROR ============ -->
+<div id="error-view" class="state hide">
+  <div class="crumb"><a href="../index.html">Written Test</a> <span class="sep">/</span> Aptitude</div>
+  <div class="card">
+    <div class="kick">Section 01 · Aptitude</div>
+    <h1>Couldn’t load</h1>
+    <p id="error-msg">Something went wrong.</p>
+    <a class="btn" href="../index.html">Back to the main app →</a>
+  </div>
+</div>
+
+<!-- ============ WORKSHEET (converted design) ============ -->
+<main class="doc hide" id="app-view">
+  <div class="running-hdr"><span>Aptitude · Quantitative</span><span>Practice Ledger</span></div>
+  <div class="running-ftr"><span>Work by hand</span><span>Self-check with the Answer Key</span></div>
+  <table class="doc-frame" role="presentation">
+    <thead><tr><td class="hdr-space"></td></tr></thead>
+    <tbody><tr><td>
+      <div id="dc-root">
+
+      <nav class="crumb screen-only"><a href="../index.html">Written Test</a> <span class="sep">/</span> Aptitude</nav>
+
+      <header style="border-top:3px solid var(--accent);padding-top:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;">
+          <div>
+            <div style="font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">Section 01 · Quantitative Aptitude</div>
+            <h1 style="font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:clamp(48px,9vw,82px);line-height:0.92;letter-spacing:-2px;margin:0;color:var(--ink);">Aptitude</h1>
+            <p style="font-style:italic;font-size:19px;color:var(--soft);margin:14px 0 0;max-width:44ch;">Quantitative shortcuts — speed, percentage, ratio, counting and number sense, drilled by hand against the clock.</p>
+          </div>
+          <div style="flex-shrink:0;"><svg width="150" height="150" viewBox="0 0 150 150" fill="none"><circle cx="75" cy="80" r="48" stroke="#b5532a" stroke-width="2.4"/><circle cx="75" cy="80" r="48" stroke="#2f6b5e" stroke-width="3" stroke-dasharray="3 8" stroke-linecap="round" opacity="0.55"/><line x1="63" y1="24" x2="87" y2="24" stroke="#b5532a" stroke-width="3" stroke-linecap="round"/><line x1="75" y1="24" x2="75" y2="32" stroke="#b5532a" stroke-width="3"/><line x1="75" y1="80" x2="75" y2="46" stroke="#221f18" stroke-width="2.4" stroke-linecap="round"/><line x1="75" y1="80" x2="101" y2="92" stroke="#b5532a" stroke-width="2.4" stroke-linecap="round"/><circle cx="75" cy="80" r="3.4" fill="#221f18"/></svg></div>
+        </div>
+        <div style="display:flex;gap:0;flex-wrap:wrap;margin-top:22px;border:1px solid var(--rule);border-radius:4px;overflow:hidden;font-family:'Spline Sans Mono',monospace;">
+          <div style="padding:9px 16px;border-right:1px solid var(--rule);font-size:11px;letter-spacing:1px;color:var(--mute);text-transform:uppercase;">Problems&nbsp;&nbsp;<b style="color:var(--accent);" id="stat-count">—</b></div>
+          <div style="padding:9px 16px;border-right:1px solid var(--rule);font-size:11px;letter-spacing:1px;color:var(--mute);text-transform:uppercase;">Worked&nbsp;&nbsp;<b style="color:var(--accent);" id="stat-worked">—</b></div>
+          <div style="padding:9px 16px;font-size:11px;letter-spacing:1px;color:var(--mute);text-transform:uppercase;">Mode&nbsp;&nbsp;<b style="color:var(--accent);">by hand</b></div>
+        </div>
+      </header>
+
+      <!-- toggle: wiring chrome, never printed -->
+      <div class="toolbar screen-only">
+        <button type="button" class="tog" id="toggle-key" aria-pressed="false">Show answer key</button>
+        <span class="hint">Off = practice sheet · On = answer key — both print clean</span>
+      </div>
+
+      <!-- ============ STATIC WORKED EXAMPLE (from the design — NOT a DB row) ============ -->
+      <div class="worked" style="margin-top:30px;background:var(--card);border:1px solid var(--rule);border-radius:6px;overflow:hidden;">
+        <div style="background:var(--accent);color:#fbf8ef;padding:11px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Worked Example</span>
+          <span style="font-family:'Spline Sans Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(255,255,255,0.55);border-radius:3px;padding:2px 8px;">Solved</span>
+          <span style="margin-left:auto;font-family:'Libre Franklin',sans-serif;font-weight:700;font-size:19px;">Average speed</span>
+        </div>
+        <div style="padding:20px 22px;">
+          <p style="font-size:17px;color:var(--ink);margin:0 0 12px;">A person covers half the journey at 40 km/h and the other half at 20 km/h. Find the average speed for the whole journey.</p>
+          <div style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);background:var(--bg2);border:1px solid var(--rule2);border-radius:4px;padding:9px 13px;margin-bottom:6px;white-space:pre-line;line-height:1.6;"><span style="color:var(--accent);font-weight:700;">GIVEN&nbsp;&nbsp;</span>equal distances d at 40 km/h and at 20 km/h</div>
+          <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--rule2);">
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);min-width:92px;flex-shrink:0;padding-top:3px;">Approach</span>
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);white-space:pre-line;line-height:1.65;">Average speed = total distance / total time (NOT the simple average of the two speeds).</span>
+          </div>
+          <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--rule2);">
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);min-width:92px;flex-shrink:0;padding-top:3px;">Work</span>
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);white-space:pre-line;line-height:1.65;">Let each half = d.   time = d/40 + d/20 = d/40 + 2d/40 = 3d/40.
+total distance = 2d.   avg = 2d ÷ (3d/40) = 80/3.</span>
+          </div>
+          <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--rule2);">
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);min-width:92px;flex-shrink:0;padding-top:3px;">Answer</span>
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);white-space:pre-line;line-height:1.65;">average speed = 80/3 = 26.67 km/h</span>
+          </div>
+          <div style="display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--rule2);">
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);min-width:92px;flex-shrink:0;padding-top:3px;">Check</span>
+            <span style="font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);white-space:pre-line;line-height:1.65;">equals the harmonic mean 2·40·20 / (40+20) = 1600/60 = 26.67  ✓</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:14px;margin:34px 0 18px;">
+        <span style="font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--ink);">Practice</span>
+        <span style="flex:1;height:2px;background:var(--accent);"></span>
+        <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">FILL BY HAND</span>
+      </div>
+
+      <!-- practice problems rendered here -->
+      <div id="problems-host"></div>
+
+      <!-- answer key (hidden by default; toggled) -->
+      <section id="answerkey-section" class="hide">
+        <div style="display:flex;align-items:center;gap:14px;margin:40px 0 18px;">
+          <span style="font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--ink);">Answer Key</span>
+          <span style="flex:1;height:2px;background:var(--accent);"></span>
+          <span style="font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--mute);letter-spacing:1px;">SELF-CHECK</span>
+        </div>
+        <div id="answerkey-host"></div>
+      </section>
+
+      <footer style="margin-top:34px;padding-top:16px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--mute);">
+        <span style="font-family:'Spectral',serif;font-style:italic;letter-spacing:0;font-size:15px;color:var(--soft);">“Average speed is total distance over total time — never the average of speeds.”</span>
+        <span>01 · Aptitude</span>
+      </footer>
+
+      </div>
+    </td></tr></tbody>
+    <tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+  </table>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- Supabase client (shared session: same URL + anon key as index.html) ----
+  const SUPABASE_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ---- DOM helpers ----
+  const $ = (id) => document.getElementById(id);
+  const show = (el) => el.classList.remove("hide");
+  const hideEl = (el) => el.classList.add("hide");
+  const pad2 = (n) => String(n).padStart(2, "0");
+
+  // Build a styled element; dynamic text is set via textContent (never innerHTML),
+  // so DB values can never inject markup.
+  const el = (tag, style, text) => {
+    const n = document.createElement(tag);
+    if (style) n.setAttribute("style", style);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  // ---- work-area templates (from the design's `apt` step list) ----
+  // These are static, empty styled divs — no dynamic data ever flows into them.
+  // The hardcoded rust ruled/margin line in the grid is left exactly as designed.
+  const GRID_STYLE = "min-height:200px;border:1px solid var(--rule2);border-radius:4px;padding-left:32px;background-color:var(--bg2);background-image:linear-gradient(90deg,transparent 23px,rgba(181,83,42,0.45) 23px,rgba(181,83,42,0.45) 24.5px,transparent 24.5px),repeating-linear-gradient(transparent 0 27px,var(--rule2) 27px 28px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:100% 100%,100% 28px,28px 100%;background-repeat:no-repeat,repeat,repeat;";
+  const LINES_STYLE = "height:58px;border-radius:4px;background-image:repeating-linear-gradient(transparent 0 27px,var(--rule2) 27px 28px);";
+
+  // The design's four-step `apt` list (Given / Approach / Work area / Answer).
+  const STD_STEPS = [
+    { n: "1", label: "Given", hint: "restate the data", kind: "lines" },
+    { n: "2", label: "Approach", hint: "pick the shortcut / method", kind: "lines" },
+    { n: "3", label: "Work area", hint: "do the working", kind: "grid" },
+    { n: "4", label: "Answer", hint: "state the result", kind: "lines" },
+  ];
+
+  function stepNode(s) {
+    const li = el("li");
+    const head = el("div", "display:flex;align-items:baseline;gap:10px;margin-bottom:7px;flex-wrap:wrap;");
+    head.appendChild(el("span", "font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);", s.n));
+    head.appendChild(el("span", "font-family:'Libre Franklin',sans-serif;font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;", s.label));
+    head.appendChild(el("span", "font-family:'Spline Sans Mono',monospace;font-size:10px;font-style:italic;color:var(--mute);", s.hint));
+    li.appendChild(head);
+    li.appendChild(el("div", s.kind === "grid" ? GRID_STYLE : LINES_STYLE));
+    return li;
+  }
+
+  // ---- one practice problem (the design's `problems` <article>) ----
+  function problemNode(p, total) {
+    const article = el("article", "margin-bottom:20px;display:grid;grid-template-columns:64px 1fr;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--card);");
+
+    const numCell = el("div", "background:var(--bg2);border-right:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:18px 0;");
+    numCell.appendChild(el("div", "font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:40px;line-height:0.9;color:var(--accent);", String(p.number)));
+    numCell.appendChild(el("div", "font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--mute);margin-top:4px;", "/ " + pad2(total)));
+    article.appendChild(numCell);
+
+    const content = el("div", "padding:18px 22px;");
+    content.appendChild(el("div", "font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent2);margin-bottom:8px;", p.subtitle));
+    content.appendChild(el("p", "font-size:18px;color:var(--ink);margin:0 0 12px;", p.prompt));
+
+    if (p.given_data) {
+      const given = el("div", "font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:var(--soft);background:var(--bg2);border:1px solid var(--rule2);border-radius:4px;padding:9px 13px;white-space:pre-line;line-height:1.6;");
+      given.appendChild(el("span", "color:var(--accent);font-weight:700;", "GIVEN  "));
+      given.appendChild(document.createTextNode(p.given_data)); // textContent path — no markup injection
+      content.appendChild(given);
+    }
+
+    const ol = el("ol", "list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:15px;");
+    STD_STEPS.forEach((s) => ol.appendChild(stepNode(s)));
+    content.appendChild(ol);
+    article.appendChild(content);
+    return article;
+  }
+
+  // ---- one answer-key card (reuses the design's `.worked` reference look) ----
+  // Dynamic values are set via textContent / createTextNode (never innerHTML);
+  // the answer/worked bodies use white-space:pre-wrap so newlines stored in the
+  // DB render as line breaks.
+  function keyLine(label, body, pending) {
+    const row = el("div", "display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--rule2);");
+    row.appendChild(el(
+      "span",
+      "font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);min-width:92px;flex-shrink:0;padding-top:3px;",
+      label
+    ));
+    const bodyStyle = (pending
+      ? "color:var(--mute);font-style:italic;"
+      : "color:var(--soft);") +
+      "font-family:'Spline Sans Mono',monospace;font-size:13px;white-space:pre-wrap;line-height:1.65;";
+    row.appendChild(el("span", bodyStyle, body)); // textContent — \n -> line breaks via pre-wrap
+    return row;
+  }
+
+  function keyCard(p) {
+    const solved = p.answer != null && String(p.answer).trim() !== "";
+
+    const card = el("div", "margin-bottom:20px;background:var(--card);border:1px solid var(--rule);border-radius:6px;overflow:hidden;");
+    card.className = "worked";
+
+    // header row (mirrors the design's worked-example bar): № · status · subtitle
+    const head = el("div", "background:var(--accent);color:#fbf8ef;padding:11px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;");
+    head.appendChild(el("span", "font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;", "№ " + pad2(p.number)));
+    head.appendChild(solved
+      ? el("span", "font-family:'Spline Sans Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:1px solid rgba(255,255,255,0.55);border-radius:3px;padding:2px 8px;", "Solved")
+      : el("span", "font-family:'Spline Sans Mono',monospace;font-size:9.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.35);border-radius:3px;padding:2px 8px;", "Pending"));
+    head.appendChild(el("span", "margin-left:auto;font-family:'Libre Franklin',sans-serif;font-weight:700;font-size:19px;", p.subtitle));
+    card.appendChild(head);
+
+    // body: prompt · given · answer · worked
+    const body = el("div", "padding:20px 22px;");
+    body.appendChild(el("p", "font-size:17px;color:var(--ink);margin:0 0 12px;", p.prompt));
+
+    if (p.given_data) {
+      const given = el("div", "font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--soft);background:var(--bg2);border:1px solid var(--rule2);border-radius:4px;padding:9px 13px;margin-bottom:6px;white-space:pre-wrap;line-height:1.6;");
+      given.appendChild(el("span", "color:var(--accent);font-weight:700;", "GIVEN  "));
+      given.appendChild(document.createTextNode(p.given_data));
+      body.appendChild(given);
+    }
+
+    body.appendChild(solved ? keyLine("Answer", p.answer, false) : keyLine("Answer", "— pending —", true));
+    if (p.worked != null && String(p.worked).trim() !== "") {
+      body.appendChild(keyLine("Worked", p.worked, false));
+    }
+    card.appendChild(body);
+
+    return card;
+  }
+
+  // =====================================================================
+  // RENDER + LOAD
+  // =====================================================================
+  function render(problems) {
+    const total = problems.length;
+
+    const host = $("problems-host");
+    host.innerHTML = ""; // clear container (no dynamic data injected)
+    problems.forEach((p) => host.appendChild(problemNode(p, total)));
+
+    const keyHost = $("answerkey-host");
+    keyHost.innerHTML = "";
+    problems.forEach((p) => keyHost.appendChild(keyCard(p)));
+
+    $("stat-count").textContent = pad2(total);
+    const worked = problems.filter((p) => p.worked != null && String(p.worked).trim() !== "").length;
+    $("stat-worked").textContent = pad2(worked);
+  }
+
+  async function loadAptitude() {
+    const { data, error } = await sb
+      .from("written_test_problems")
+      .select("*")
+      .eq("topic_id", "aptitude")
+      .order("number");
+    if (error) throw error;
+    return data || [];
+  }
+
+  // ---- answer-key toggle ----
+  $("toggle-key").addEventListener("click", () => {
+    const sec = $("answerkey-section");
+    const btn = $("toggle-key");
+    const showing = sec.classList.toggle("hide") === false; // toggle returns true if 'hide' now present
+    btn.classList.toggle("on", showing);
+    btn.setAttribute("aria-pressed", String(showing));
+    btn.textContent = showing ? "Hide answer key" : "Show answer key";
+  });
+
+  // =====================================================================
+  // BOOT
+  // =====================================================================
+  async function boot(session) {
+    // Injected-rows guard: if a row array is supplied on window.__ROWS__,
+    // render it directly — no auth, no session check, no Supabase query.
+    if (Array.isArray(window.__ROWS__)) {
+      hideEl($("gate-view")); hideEl($("error-view")); hideEl($("loading-view"));
+      render(window.__ROWS__);
+      show($("app-view"));
+      return;
+    }
+    if (!session) {
+      hideEl($("loading-view")); hideEl($("app-view")); hideEl($("error-view"));
+      show($("gate-view"));
+      return;
+    }
+    hideEl($("gate-view")); hideEl($("error-view")); hideEl($("app-view"));
+    show($("loading-view"));
+    try {
+      const problems = await loadAptitude();
+      render(problems);
+      hideEl($("loading-view"));
+      show($("app-view"));
+    } catch (e) {
+      hideEl($("loading-view"));
+      $("error-msg").textContent = "Couldn’t load the worksheet: " + (e.message || e);
+      show($("error-view"));
+    }
+  }
+
+  // React to session changes (covers magic-link return + sign-in/out)
+  let booted = false;
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session && !booted) { booted = true; boot(session); }
+    else if (!session) { booted = false; boot(null); }
+  });
+
+  // Initial check
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) { if (!booted) { booted = true; boot(data.session); } }
+    else { boot(null); }
+  });
+})();
+</script>
+</body>
+</html>
