@@ -175,11 +175,6 @@ $("topic").addEventListener("change",showProgress);
 
 // ---------- generate ----------
 $("gen").addEventListener("click", generate);
-$("print").addEventListener("click", ()=>{
-  const m=$("gen-msg");
-  if(!CURRENT.length){m.className="msg err";m.textContent="Generate a batch first, then save as PDF.";return;}
-  window.print();
-});
 async function generate(){
   const tid=$("topic").value, mode=$("batch").value, n=parseInt($("count").value)||5;
   const m=$("gen-msg"); m.className="msg"; m.textContent="Loading…";
