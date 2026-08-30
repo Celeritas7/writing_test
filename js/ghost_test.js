@@ -59,8 +59,8 @@ function renderGhost(){
 }
 /* ---- import from a second Supabase project (japanese_* tables) ---- */
 /* Paste your Japanese project's URL and ANON key here — then the panel comes prefilled. */
-const JP_URL = "";
-const JP_ANON_KEY = "";
+const JP_URL = "https://ulgrfumbwjovbjzjiems.supabase.co";
+const JP_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsZ3JmdW1id2pvdmJqemppZW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzIyNjcsImV4cCI6MjA4Mjk0ODI2N30.ix5Vh4Y3GXNbQbzVtTD_WSko0L3cr5q_eCnTuDEMh7M";
 const JP_DEFAULTS = {table:'', log:'', type:'ghost', n:20};
 
 let GH_PANEL=false, GH_PREVIEW=null, GH_TABLES=null;
