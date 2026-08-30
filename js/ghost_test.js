@@ -59,8 +59,8 @@ function renderGhost(){
 }
 /* ---- import from a second Supabase project (japanese_* tables) ---- */
 /* Paste your Japanese project's URL and ANON key here — then the panel comes prefilled. */
-const JP_URL = "https://ulgrfumbwjovbjzjiems.supabase.co";
-const JP_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsZ3JmdW1id2pvdmJqemppZW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNzIyNjcsImV4cCI6MjA4Mjk0ODI2N30.ix5Vh4Y3GXNbQbzVtTD_WSko0L3cr5q_eCnTuDEMh7M";
+const JP_URL = "";
+const JP_ANON_KEY = "";
 const JP_DEFAULTS = {table:'', log:'', type:'ghost', n:20};
 
 let GH_PANEL=false, GH_PREVIEW=null, GH_TABLES=null;
@@ -392,7 +392,9 @@ async function jpUpdateReviews(log, url, key){
       seconds:Math.max(0, l.seconds|0),
       correct_count:(prev.correct_count||0)+(l.is_correct?1:0), wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
       history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0}].slice(-20)};
-    if(prev.id!=null) row.id=prev.id; else if(prev.user_id) row.user_id=prev.user_id;
+    /* user_id is text NOT NULL with no default — a new word 400s without it */
+    row.user_id=prev.user_id||l.user_id||ghWho();
+    if(prev.id!=null) row.id=prev.id;
     return row;
   });
   const r=await fetch(`${url}/rest/v1/japanese_user_reviews`,{method:'POST',headers:{...H, Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
@@ -401,7 +403,7 @@ async function jpUpdateReviews(log, url, key){
 }
 /* かな→kanji (written recall) also drives the 1–5 rating in japanese_user_markings:
    pass → first-two band (2 if unmarked), fail → last-three band (5 if unmarked) */
-async function jpUpdateMarkings(items, url, key){
+async function jpUpdateMarkings(items, url, key, who){
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
   if(!items.length) return 0;
   const inList='('+items.map(i=>'"'+String(i.kanji).replace(/"/g,'')+'"').join(',')+')';
@@ -416,7 +418,8 @@ async function jpUpdateMarkings(items, url, key){
     if(it.pass) mark = (cur>=1&&cur<=2) ? cur : 2;      // stay if already in first two, else 2
     else        mark = (cur>=3&&cur<=5) ? cur : 5;      // stay if already in last three, else 5
     const row={kanji:it.kanji, marking:mark, updated_at:iso, marked_at:iso};
-    if(prev.id!=null) row.id=prev.id; else if(prev.user_id) row.user_id=prev.user_id;
+    row.user_id=prev.user_id||who||ghWho();
+    if(prev.id!=null) row.id=prev.id;
     return row;
   });
   const r=await fetch(`${url}/rest/v1/japanese_user_markings`,{method:'POST',headers:{...H, Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
@@ -455,7 +458,7 @@ window.ghSave=async()=>{
         if(i<0) acc.push({kanji:k, pass}); else acc[i].pass=acc[i].pass&&pass;
         return acc; },[]);
       if(writes.length){
-        try{ const n=await jpUpdateMarkings(writes, jpUrlNow, jpKeyNow); extra+=' · '+n+' かな→漢字 rating'+(n===1?'':'s'); }
+        try{ const n=await jpUpdateMarkings(writes, jpUrlNow, jpKeyNow, c.user||ghWho()); extra+=' · '+n+' かな→漢字 rating'+(n===1?'':'s'); }
         catch(e){ extra+=' (rating write failed: '+(e.message||e)+')'; }
       }
       if(logTable){
