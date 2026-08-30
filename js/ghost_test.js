@@ -1,5 +1,5 @@
 /* Ghost test — on-screen handwritten sheet with answer overlay. Depends on globals from learning_hub.js */
-let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[]};
+let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[], brush:0, time:{}, focus:null, act:0, limit:{}};
 const GH_W=[1.6,2.6,4.2];
 
 const GH_LANG=/lang|japan|kanji|kana|vocab|word/i;
@@ -21,7 +21,7 @@ function renderGhost(){
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
-    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w">${esc(p.prompt||p.subtitle)}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
+    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" title="Slow for this word — a ✓ here schedules half the next interval">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
   }).join('');
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
   const inst = nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
@@ -37,8 +37,17 @@ function renderGhost(){
       <button class="btn sm ghost gh-t" id="gh-width" onclick="ghWidth()">Width: M</button>
       <button class="btn sm ghost gh-t" onclick="ghUndo()">↶ Undo</button>
       <button class="btn sm ghost gh-t" onclick="ghClear()">Clear ink</button>
+    </div>
+    <div class="gh-mark-bar">
+      <span class="gh-sep">Mark by</span>
+      <button class="btn sm ghost gh-t ${GH.brush===0?'on':''}" onclick="ghBrush(0)">Tap</button>
+      <button class="btn sm ghost gh-t ${GH.brush===1?'on':''}" onclick="ghBrush(1)">✓</button>
+      <button class="btn sm ghost gh-t ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
+      <button class="btn sm ghost gh-t ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
+      <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
+      <button class="btn sm ghost gh-t" onclick="ghClearMarks()">Clear marks</button>
       <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()">Ghost</button>
-      <button class="btn sm" style="margin-left:auto" onclick="ghSave()">Save results</button>
+      <button class="btn sm gh-save" onclick="ghSave()">Save results</button>
     </div>
     <div class="gh-sheet ${GH.ghost?'ghost-on':''}" id="gh-sheet">
       <div class="gh-hd"><h2>${esc(label||'Ghost test')}</h2><span class="s">|</span><span class="tt">Ghost test</span><span class="nm">名前 <u></u></span><span class="sc">得点 <b id="gh-score">___</b> / ${GH.items.length}</span></div>
@@ -164,11 +173,14 @@ window.ghSeed=async()=>{
   }
   TOPICS.push(topic); PROBLEMS.push(...rows);
   toast('Kanji topic created with 20 items.');
-  GH.topic=topic.id; GH.marks={}; GH.strokes=[]; renderGhost();
+  GH.topic=topic.id; GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost();
 };
-window.ghPick=id=>{ GH.ext=null; GH.topic=id; GH.marks={}; GH.strokes=[]; renderGhost(); };
-window.ghMark=(e,id)=>{ e.stopPropagation(); GH.marks[id]=((GH.marks[id]||0)+1)%4; const el=e.target.parentElement.querySelector('.gh-mk'); const m=GH.marks[id]; el.textContent=['','✓','△','✗'][m]; el.className='gh-mk '+['','ok','mid','bad'][m]; ghScore();
-  if(m===3&&GH.seq) ghRequeue(id); };
+window.ghPick=id=>{ GH.ext=null; GH.topic=id; GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost(); };
+window.ghMark=(e,id)=>{
+  e.stopPropagation();
+  if(GH.brush) return ghSetMark(id, GH.brush);
+  ghSetMark(id, ((GH.marks[id]||0)+1)%4);
+};
 /* sequence mode: a ✗ word comes back 5 items later, until it's right */
 function ghRequeue(id){
   const src=GH.items.find(p=>p.id===id); if(!src) return;
@@ -182,15 +194,139 @@ function ghRequeue(id){
 }
 function ghScore(){ let s=0,any=false; for(const p of GH.items){ const m=GH.marks[p.id]||0; if(m){any=true; s+=m===1?1:m===2?.5:0;} } $('gh-score').textContent=any?(s%1?s.toFixed(1):s):'___'; }
 
+/* ---- per-word clock -------------------------------------------------
+   Time runs from the moment an item gets focus (you start writing in it,
+   or tap it) until you leave it. It pauses after 10s with no activity,
+   so a coffee break is not counted as thinking. Seconds go to
+   japanese_user_reviews.seconds and into each history entry as `s`.
+   Migration: alter table japanese_user_reviews add column seconds int;
+-------------------------------------------------------------------- */
+const GH_IDLE=10000, GH_TICK=500;
+function ghFocus(id){
+  if(!id) return;
+  GH.act=Date.now();
+  if(GH.focus!==id) GH.focus=id;
+}
+function ghPing(){ GH.act=Date.now(); }
+function ghTick(){
+  if(!GH.focus) return;
+  if(Date.now()-GH.act>GH_IDLE) return;                 // idle: clock paused
+  GH.time[GH.focus]=(GH.time[GH.focus]||0)+GH_TICK/1000;
+  const cell=document.querySelector('.gh-item[data-gid="'+String(GH.focus).replace(/"/g,'\\"')+'"] .gh-t-sec');
+  if(cell) cell.textContent=Math.round(GH.time[GH.focus])+'s';
+  ghClock(GH.focus);
+}
+function ghStartClock(){ clearInterval(GH._clock); GH._clock=setInterval(ghTick, GH_TICK); }
+function ghSeconds(id){ return Math.round(GH.time[id]||0); }
+
+/* ---- Phase 2: slow-but-correct --------------------------------------
+   Slow = longer than 1.5x the median of that word's last 3 recorded
+   times. No history yet -> a flat 20s. A slow ✓ still advances the
+   ladder, but only half the interval, snapped to the nearest ladder
+   step: a slow correct answer that would have earned 8 days gets 4.
+   The clock icon lights on the item the moment it crosses the line, so
+   the shorter interval is never a surprise.
+--------------------------------------------------------------------- */
+const GH_SLOW_MULT=1.5, GH_SLOW_FLAT=20;
+function ghMedian(a){ const v=a.slice().sort((x,y)=>x-y), n=v.length; if(!n) return 0; return n%2 ? v[(n-1)/2] : (v[n/2-1]+v[n/2])/2; }
+function ghSlowLimit(prev){
+  const past=(Array.isArray(prev&&prev.history)?prev.history:[]).map(h=>+((h&&h.s)||0)).filter(s=>s>0).slice(-3);
+  return past.length ? GH_SLOW_MULT*ghMedian(past) : GH_SLOW_FLAT;
+}
+function ghKeyOf(p){ return p&&(p.kanji||p.prompt); }
+function ghLimitFor(id){ const p=GH.items.find(x=>x.id===id); return (p&&GH.limit[ghKeyOf(p)])||GH_SLOW_FLAT; }
+function ghSlowNow(id){ return (GH.time[id]||0) > ghLimitFor(id); }
+function ghClock(id){
+  const el=document.querySelector('.gh-item[data-gid="'+(window.CSS&&CSS.escape?CSS.escape(id):id)+'"] .gh-clk');
+  if(el) el.classList.toggle('on', ghSlowNow(id));
+}
+/* one read per sheet — last 3 times per word, so the icon can fire live */
+async function ghLoadLimits(){
+  GH.limit={};
+  const c=ghCfg(), url=(typeof JP!=='undefined'&&JP.url)||c.url, key=(typeof JP!=='undefined'&&JP.key)||c.key;
+  if(DEMO||!GH.ext||!url||!key||!GH.items.length) return;
+  const list=GH.items.map(ghKeyOf).filter(Boolean);
+  const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
+  try{
+    const r=await fetch(url+'/rest/v1/japanese_user_reviews?kanji=in.'+encodeURIComponent(inList)+'&select=kanji,history',{headers:{apikey:key,Authorization:'Bearer '+key}});
+    if(!r.ok) return;
+    for(const row of await r.json()) GH.limit[row.kanji]=ghSlowLimit(row);
+  }catch(e){}
+}
+
+/* ---- marking: tap to cycle, or arm a brush and drag across items ---- */
+function ghSetMark(id, m){
+  GH.marks[id]=m;
+  const cell=document.querySelector('.gh-item[data-gid="'+String(id).replace(/"/g,'\\"')+'"]');
+  if(cell){
+    const el=cell.querySelector('.gh-mk');
+    el.textContent=['','✓','△','✗'][m];
+    el.className='gh-mk '+['','ok','mid','bad'][m];
+  }
+  ghScore();
+  if(m===3&&GH.seq) ghRequeue(id);
+}
+window.ghBrush=(b)=>{
+  GH.brush = GH.brush===b ? 0 : b;
+  ghApplyBrush();
+  toast(GH.brush
+    ? 'Marker '+['','✓','△','✗'][GH.brush]+' — drag across items to mark'
+    : 'Tap mode — tap an item number to cycle its mark', 2200);
+  renderGhost();
+};
+function ghApplyBrush(){
+  const sh=$('gh-sheet');
+  if(ghCv) ghCv.style.pointerEvents = GH.brush ? 'none' : '';
+  if(sh){ sh.style.cursor = GH.brush ? 'crosshair' : ''; sh.style.touchAction = GH.brush ? 'none' : ''; }
+}
+/* hit-test from the sheet: pointerdown captures the pointer, so per-item
+   enter events never fire mid-drag */
+let ghPainting=false, ghLastPainted=null;
+function ghInitBrush(){
+  const sh=$('gh-sheet'); if(!sh) return;
+  const at=(x,y)=>{ const el=document.elementFromPoint(x,y); const c=el&&el.closest?el.closest('.gh-item'):null; return c?c.dataset.gid:null; };
+  const brushAt=(x,y)=>{ const id=at(x,y); if(!id||id===ghLastPainted) return; ghLastPainted=id; ghSetMark(id, GH.brush); };
+  sh.addEventListener('pointerdown',e=>{
+    if(!GH.brush) return;
+    ghPainting=true; ghLastPainted=null;
+    if(e.target.releasePointerCapture&&e.target.hasPointerCapture&&e.target.hasPointerCapture(e.pointerId))
+      e.target.releasePointerCapture(e.pointerId);
+    e.preventDefault();
+    brushAt(e.clientX,e.clientY);
+  });
+  sh.addEventListener('pointermove',e=>{ if(GH.brush&&ghPainting) brushAt(e.clientX,e.clientY); });
+  addEventListener('pointerup',()=>{ ghPainting=false; ghLastPainted=null; });
+  addEventListener('pointercancel',()=>{ ghPainting=false; ghLastPainted=null; });
+  ghApplyBrush();
+}
+/* fill only the UNMARKED items — never overwrites a ✗ or △ you set */
+window.ghRestPass=()=>{
+  let n=0;
+  for(const p of GH.items) if(!GH.marks[p.id]){ ghSetMark(p.id, 1); n++; }
+  toast(n ? n+' unmarked '+(n===1?'item':'items')+' marked ✓' : 'Every item is already marked', 2200);
+};
+/* wipe every mark, with a warning. Ink is untouched. */
+window.ghClearMarks=()=>{
+  const n=Object.keys(GH.marks).filter(k=>GH.marks[k]).length;
+  if(!n) return toast('No markings to clear', 1800);
+  if(!confirm('Clear all '+n+' markings on this sheet?\n\nYour handwriting stays. This cannot be undone.')) return;
+  GH.marks={};
+  renderGhost();
+  toast('All markings cleared', 2000);
+};
+
 /* ---- ink ---- */
 let ghCtx,ghCv,ghCur=null;
 function ghInit(){
   ghCv=$('gh-ink'); if(!ghCv) return; ghCtx=ghCv.getContext('2d');
   ghResize();
-  ghCv.onpointerdown=e=>{ if(e.pointerType==='touch') return; ghCv.setPointerCapture(e.pointerId); const p0=ghPos(e); const own=ghOwner(p0); ghCur={w:GH_W[GH.wi],e:GH.tool==='erase',own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]}; };
-  ghCv.onpointermove=e=>{ if(!ghCur) return; const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e]; for(const ev of evs){ const q=ghPos(ev); ghCur.p.push(q[0]-ghCur.ox, q[1]-ghCur.oy); } ghRedraw(); ghPaint(ghCur); };
+  ghCv.onpointerdown=e=>{ if(e.pointerType==='touch') return; ghCv.setPointerCapture(e.pointerId); const p0=ghPos(e); const own=ghOwner(p0); ghFocus(own&&own.id); ghCur={w:GH_W[GH.wi],e:GH.tool==='erase',own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]}; };
+  ghCv.onpointermove=e=>{ if(!ghCur) return; ghPing(); const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e]; for(const ev of evs){ const q=ghPos(ev); ghCur.p.push(q[0]-ghCur.ox, q[1]-ghCur.oy); } ghRedraw(); ghPaint(ghCur); };
   ghCv.onpointerup=ghCv.onpointercancel=()=>{ if(!ghCur) return; if(ghCur.p.length>=4) GH.strokes.push(ghCur); ghCur=null; ghRedraw(); };
   addEventListener('resize',ghResize);
+  ghInitBrush();
+  ghStartClock();
+  ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
 function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1; ghCv.width=r.width*d; ghCv.height=r.height*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
 /* strokes anchor to the item cell they start in, so re-queueing keeps ink with its question */
@@ -222,34 +358,46 @@ window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
 const SRS=[0,1,2,4,8,16,30,60,120];
-function srsNext(prev, rating){
-  let step=prev.step==null?0:prev.step, lapses=prev.lapses||0;
-  if(rating>=5) step=Math.min(step+1, SRS.length-1);
+/* half the interval, snapped to the nearest ladder step — ties go shorter,
+   never longer than the un-halved step, never under 1 day */
+function srsHalfStep(step){
+  const want=SRS[step]/2; let best=1;
+  for(let i=1;i<SRS.length;i++) if(Math.abs(SRS[i]-want)<Math.abs(SRS[best]-want)) best=i;
+  return Math.min(best, Math.max(1, step));
+}
+function srsNext(prev, rating, slow){
+  let step=prev.step==null?0:prev.step, lapses=prev.lapses||0, halved=false;
+  if(rating>=5){ step=Math.min(step+1, SRS.length-1); if(slow){ step=srsHalfStep(step); halved=true; } }
   else if(rating>=3) step=Math.max(1, step-1);
   else { if(step>=4) lapses++; step=0; }
   if((prev.wrong_count||0)+(rating<3?1:0)>=5) step=Math.min(step,2);   // leech cap: max 4 days
-  return {step, lapses, days:SRS[step]||1};
+  return {step, lapses, halved, days:SRS[step]||1};
 }
 async function jpUpdateReviews(log, url, key){
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
   const list=log.map(r=>r.kanji);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
-  const q=await fetch(`${url}/rest/v1/japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=id,kanji,correct_count,wrong_count,user_id,history,step,lapses`,{headers:H});
+  const q=await fetch(`${url}/rest/v1/japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=id,kanji,correct_count,wrong_count,user_id,history,step,lapses,seconds`,{headers:H});
   const have=q.ok?await q.json():[];
   const byK={}; for(const r of have) byK[r.kanji]=r;
   const today=new Date(), iso=today.toISOString();
+  const plan=[];
   const rows=log.map(l=>{
     const prev=byK[l.kanji]||{};
-    const s=srsNext(prev, l.rating);
+    const slow=!!l.is_correct && (l.seconds||0) > ghSlowLimit(prev);
+    const s=srsNext(prev, l.rating, slow);
+    plan.push({kanji:l.kanji, seconds:l.seconds||0, days:Math.max(1,s.days), slow, halved:!!s.halved});
     const next=new Date(today.getTime()+Math.max(1,s.days)*864e5).toISOString().slice(0,10);
     const row={kanji:l.kanji, last_review:iso, next_review:next, last_rating:l.rating, updated_at:iso, step:s.step, lapses:s.lapses,
+      seconds:Math.max(0, l.seconds|0),
       correct_count:(prev.correct_count||0)+(l.is_correct?1:0), wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
-      history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating}].slice(-20)};
+      history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0}].slice(-20)};
     if(prev.id!=null) row.id=prev.id; else if(prev.user_id) row.user_id=prev.user_id;
     return row;
   });
   const r=await fetch(`${url}/rest/v1/japanese_user_reviews`,{method:'POST',headers:{...H, Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
   if(!r.ok){ const b=await r.json().catch(()=>({})); throw new Error(b.message||('HTTP '+r.status)); }
+  return plan;
 }
 /* かな→kanji (written recall) also drives the 1–5 rating in japanese_user_markings:
    pass → first-two band (2 if unmarked), fail → last-three band (5 if unmarked) */
@@ -290,11 +438,18 @@ window.ghSave=async()=>{
   if(GH.ext&&!DEMO&&jpUrlNow&&jpKeyNow){
     const today=new Date().toISOString().slice(0,10);
     const log=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
-      return {user_id:c.user||ghWho(), kanji:p.kanji||p.prompt, test_type:c.type||'ghost', test_date:today, is_correct:m===1, rating:m===1?5:m===2?3:1}; })
-      .reduce((acc,r)=>{ const i=acc.findIndex(x=>x.kanji===r.kanji); if(i<0) acc.push(r); else if(r.rating<acc[i].rating) acc[i]=r; return acc; },[]);
+      return {user_id:c.user||ghWho(), kanji:p.kanji||p.prompt, test_type:c.type||'ghost', test_date:today, is_correct:m===1, rating:m===1?5:m===2?3:1, seconds:ghSeconds(p.id)}; })
+      .reduce((acc,r)=>{ const i=acc.findIndex(x=>x.kanji===r.kanji);
+        if(i<0){ acc.push(r); return acc; }
+        const s=Math.max(acc[i].seconds||0, r.seconds||0);
+        if(r.rating<acc[i].rating) acc[i]=r;                 // worst mark wins
+        acc[i].seconds=s;                                    // longest time wins
+        return acc; },[]);
     try{
-      await jpUpdateReviews(log, jpUrlNow, jpKeyNow);
+      const plan=await jpUpdateReviews(log, jpUrlNow, jpKeyNow);
       extra=' · japanese_user_reviews updated';
+      const halved=(plan||[]).filter(x=>x.halved);
+      if(halved.length) extra+=' · '+halved.length+' slow ✓ at half interval ('+halved.map(x=>x.days+'d').join(', ')+')';
       const writes=GH.items.filter(p=>p.rev&&GH.marks[p.id]).reduce((acc,p)=>{
         const k=p.kanji||p.answer, pass=GH.marks[p.id]===1, i=acc.findIndex(x=>x.kanji===k);
         if(i<0) acc.push({kanji:k, pass}); else acc[i].pass=acc[i].pass&&pass;
@@ -305,19 +460,20 @@ window.ghSave=async()=>{
       }
       if(logTable){
         try{
-          const r=await fetch(`${jpUrlNow}/rest/v1/${encodeURIComponent(logTable)}`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log)});
+          const bare=log.map(({seconds, ...r})=>r);   // log tables have no seconds column
+          const r=await fetch(`${jpUrlNow}/rest/v1/${encodeURIComponent(logTable)}`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(bare)});
           if(r.ok) extra+=' + '+logTable;
         }catch(e){}
       }
     }catch(e){
       extra=' · reviews upsert failed ('+(e.message||e)+')';
       try{
-        const r=await fetch(`${jpUrlNow}/rest/v1/japanese_daily_test_log`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log)});
+        const r=await fetch(`${jpUrlNow}/rest/v1/japanese_daily_test_log`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log.map(({seconds, ...r})=>r))});
         extra += r.ok ? ' — saved to japanese_daily_test_log instead. Run: create unique index ux_jur_kanji on japanese_user_reviews (kanji);'
                       : ' — NOT SAVED. Run: create unique index ux_jur_kanji on japanese_user_reviews (kanji);';
       }catch(e2){ extra+=' — NOT SAVED.'; }
     }
   } else if(GH.ext&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
-  GH.marks={}; GH.strokes=[]; renderGhost();
+  GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost();
 };

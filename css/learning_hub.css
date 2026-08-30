@@ -1,16 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Learning Hub</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<style>
+/* Learning Hub — all styles. Sits next to learning_hub.html.
+   Was inline in <style>; split out so CSS / JS / HTML are separate files.
+   Sections: 1 tokens · 2 base type · 3 controls · 4 cards & chips
+             5 shell + nav · 6 content blocks · 7 ghost test · 8 responsive
+   Every media query lives in §8, ordered widest → narrowest. */
+
+/* ---- 1 · tokens ---------------------------------------------------- */
 :root{--ink:#1c2320;--soft:#46524b;--mute:#7a857e;--line:#e0dcd0;--bg:#f4f2ec;--card:#ffffff;--accent:#23694e;--accent-soft:#e7f0eb;--amber:#b3811e;--blue:#2c5e8f;--red:#a4302c;--ok:#23694e}
+
+/* ---- 2 · base type ------------------------------------------------- */
 *{box-sizing:border-box}html,body{margin:0}
 body{font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.55;color:var(--ink);background:var(--bg)}
 h1,h2,h3{font-family:"Space Grotesk",sans-serif;letter-spacing:-0.3px;margin:0}
@@ -18,6 +15,9 @@ h1{font-size:26px;font-weight:700}h2{font-size:19px;font-weight:600}h3{font-size
 a{color:var(--accent)}a:hover{color:#184e39}
 .mono{font-family:"IBM Plex Mono",monospace}
 .kicker{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--mute)}
+.hide{display:none!important}
+
+/* ---- 3 · controls -------------------------------------------------- */
 .btn{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;padding:10px 18px;cursor:pointer;white-space:nowrap;transition:background .12s,transform .08s}
 .btn:active{transform:scale(.97)}
 .btn:hover{background:#1d5a42}
@@ -27,10 +27,16 @@ a{color:var(--accent)}a:hover{color:#184e39}
 .btn:disabled{opacity:.45;cursor:default}
 input,select{font-family:"IBM Plex Sans",sans-serif;font-size:14px;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#fff}
 label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);display:block;margin-bottom:5px}
+.formrow{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-top:16px}
+.pillbar{display:flex;gap:8px;flex-wrap:wrap}
+.pill-t{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);background:#fff;color:var(--soft);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
+.pill-t:hover{border-color:var(--ink)}
+.pill-t.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ---- 4 · cards, chips, messages, toast ----------------------------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
 .msg{font-family:"IBM Plex Mono",monospace;font-size:12.5px;margin-top:10px}
 .msg.ok{color:var(--ok)}.msg.err{color:var(--red)}
-.hide{display:none!important}
 .chip{display:inline-flex;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.5px;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--soft);background:#fff;white-space:nowrap}
 .chip.warmup{color:var(--amber);border-color:#e5d3ab;background:#faf5e8}
 .chip.core{color:var(--blue);border-color:#c3d4e4;background:#eef4f9}
@@ -40,6 +46,10 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .chip.new{color:var(--soft)}
 .chip.mastered,.chip.ok{color:#fff;background:var(--ok);border-color:var(--ok)}
 .chip.status-exported{color:var(--blue)}.chip.status-graded{color:#fff;background:var(--ok);border-color:var(--ok)}.chip.status-solved{color:var(--amber)}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:12px 18px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:380px}
+.toast.show{opacity:1}
+
+/* ---- 5 · shell, sidebar, gate -------------------------------------- */
 .shell{display:grid;grid-template-columns:228px 1fr;min-height:100vh}
 .side{border-right:1px solid var(--line);background:#faf9f5;padding:22px 16px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh}
 .side .brand{padding:0 10px 16px}
@@ -50,6 +60,10 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .nav-item .cnt{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--mute)}
 .side .foot{margin-top:auto;padding:10px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
 .main{padding:30px 36px;max-width:1000px;width:100%}
+.gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.gate-box{max-width:460px;width:100%}
+
+/* ---- 6 · library, queue, review, setup ----------------------------- */
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px}
 .subj-head{display:flex;align-items:center;gap:12px;cursor:pointer;padding:12px 16px;background:#fff;border:1px solid var(--line);border-radius:12px;user-select:none;transition:border-color .12s}
 .subj-head .kicker{white-space:nowrap}
@@ -83,62 +97,85 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .flow .node b{font-family:"Space Grotesk",sans-serif;font-size:13.5px;display:block}
 .flow .node span{font-size:11.5px;color:var(--mute)}
 .flow .arr{display:flex;align-items:center;padding:0 8px;color:var(--mute);font-size:16px}
-.pillbar{display:flex;gap:8px;flex-wrap:wrap}
-.pill-t{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);background:#fff;color:var(--soft);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
-.pill-t:hover{border-color:var(--ink)}
-.pill-t.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-.formrow{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-top:16px}
 table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .tbl th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 .tbl td{padding:9px 10px;border-bottom:1px solid #eeece4}
-.toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:12px 18px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:380px}
-.toast.show{opacity:1}
-.gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.gate-box{max-width:460px;width:100%}
-@media (max-width:760px){
-.shell{grid-template-columns:1fr}
-.side{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;gap:2px;padding:10px 12px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;z-index:5}
-.side .brand{padding:0 10px 0 4px}.side .brand .kicker{display:none}.side .brand h3{font-size:14px;white-space:nowrap}
-.nav-item{padding:7px 10px;font-size:13px}.nav-item .cnt{display:none}
-.side .foot{margin:0 0 0 auto;border:none;padding:0 4px;display:flex;align-items:center;gap:8px}.side .foot #who{display:none}
-.main{padding:18px 16px}
-.grid2{grid-template-columns:1fr 1fr}
-h1{font-size:22px}
-.subj-head{padding:10px 12px;gap:8px}.subj-head h2{font-size:16px}.subj-head .kicker{display:none}
-.prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:100%}
-.flow .arr{display:none}.flow{gap:8px}
+
+/* ---- 7 · ghost test ------------------------------------------------ */
+/* 7a · toolbars. Pen/eraser/width in .gh-bar stay at the top; the marking
+   controls in .gh-mark-bar go fixed-bottom on phones (see §8). */
+.gh-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.gh-mark-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.gh-mark-bar .gh-save{margin-left:auto}
+.gh-sep{font:600 10px/1 "IBM Plex Mono",monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);padding-left:8px;margin-left:4px;border-left:1px solid var(--line);align-self:center}
+.gh-t.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.gh-ghost{background:transparent;color:#c0392b;border:1px solid #c0392b}
+.gh-ghost.on{background:#c0392b;border-color:#c0392b;color:#fff}
+
+/* 7b · the sheet */
+.gh-sheet{position:relative;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 14px 34px -20px rgba(0,0,0,.28);padding:30px 34px 44px;min-height:620px;-webkit-user-select:none;user-select:none}
+.gh-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.gh-hd h2{font-size:22px}
+.gh-hd .s{color:#aaa}
+.gh-hd .tt{font-weight:600}
+.gh-hd .nm{margin-left:auto;font-size:14px;font-weight:600}
+.gh-hd .nm u{text-decoration:none;border-bottom:1.5px solid var(--ink);display:inline-block;width:130px}
+.gh-hd .sc{font-size:14px;font-weight:600}
+.gh-hd .sc b{display:inline-block;min-width:38px;border-bottom:1.5px solid var(--ink);text-align:center;color:#c0392b}
+.gh-inst{color:var(--mute);font-size:13px;margin:10px 0 22px}
+.gh-grid{display:grid;grid-template-columns:repeat(5,1fr);column-gap:24px}
+.gh-rule{grid-column:1/-1;border-top:1.5px solid #bbb;margin:2px 0 18px}
+#gh-ink{position:absolute;inset:0;z-index:1;width:100%;height:100%;touch-action:none;cursor:crosshair}
+
+/* 7c · one item */
+.gh-item{position:relative;padding:6px 0 108px}
+.gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
+.gh-n:hover{background:#f1efe7}
+.gh-w{font-size:17px;border-bottom:1.5px solid var(--ink);padding-bottom:1px}
+.gh-mk{position:absolute;top:0;right:2px;font-size:17px;font-weight:700}
+.gh-mk.ok{color:#2e8b46}.gh-mk.mid{color:#d98216}.gh-mk.bad{color:#c0392b}
+.gh-g{position:absolute;left:0;right:4px;top:38px;font-size:19px;line-height:1.15;color:#c0392b;opacity:0;transition:opacity .15s;pointer-events:none;overflow-wrap:anywhere}
+.gh-sheet.ghost-on .gh-g{opacity:.45}
+.gh-item.retry .gh-n{background:#c0392b;color:#fff}
+.gh-item.retry .gh-w{border-bottom-color:#c0392b}
+
+/* 7d · per-word clock. .gh-t-sec is the quiet running seconds; .gh-clk is
+   the slow flag — it appears only once the word passes 1.5x its own median,
+   i.e. a ✓ here will be scheduled at half the interval. */
+.gh-t-sec{font:600 9px/1 "IBM Plex Mono",monospace;letter-spacing:.5px;color:var(--mute);margin-left:6px;opacity:.75}
+.gh-clk{display:none;margin-left:5px;font-size:12px;line-height:1;color:#b4531f}
+.gh-clk.on{display:inline-block}
+
+/* 7e · Japanese database import panel */
+.jp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
+.jp-grid .card:hover{border-color:#c0392b}
+
+/* ---- 8 · responsive (widest → narrowest) --------------------------- */
+@media (max-width:1040px){
+  .gh-grid{grid-template-columns:repeat(3,1fr)}
+  .gh-sheet{padding:22px 18px 36px}
 }
-</style>
-</head>
-<body>
-<div id="gate" class="gate-wrap">
-  <div class="gate-box card">
-    <h1 style="margin:0 0 10px">Learning Hub</h1>
-    <p style="color:var(--soft);margin:0 0 16px">Build problem batches, export them to your iPad, and let Cowork grade your handwritten work. Sign in with your email.</p>
-    <div style="display:flex;gap:10px">
-      <input id="email" type="email" placeholder="you@example.com" style="flex:1">
-      <button id="send-link" class="btn">Send link</button>
-    </div>
-    <div id="gate-msg" class="msg"></div>
-    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
-      <button id="demo-btn" class="btn ghost sm">Explore with sample data</button>
-    </div>
-  </div>
-</div>
-
-<div id="app" class="shell hide">
-  <aside class="side">
-    <div class="brand"><h3>Learning Hub</h3></div>
-    <a class="nav-item" href="#library" data-nav="library">Library <span class="cnt" id="cnt-lib"></span></a>
-    <a class="nav-item" href="#build" data-nav="build">Build a batch <span class="cnt" id="cnt-due"></span></a>
-    <a class="nav-item" href="#review" data-nav="review">Review <span class="cnt" id="cnt-fb"></span></a>
-    <a class="nav-item" href="#setup" data-nav="setup">Setup <span class="cnt" id="cnt-setup"></span></a>
-    <div class="foot"><div id="who" class="mono" style="font-size:11px;word-break:break-all"></div><a href="#" id="signout" style="font-size:12px">Sign out</a></div>
-  </aside>
-  <main class="main" id="main"></main>
-</div>
-
-<div id="toast" class="toast"></div>
-<script src="learning_hub.js"></script>
-</body>
-</html>
+@media (max-width:820px){
+  .gh-mark-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);box-shadow:0 -10px 26px -20px rgba(0,0,0,.55)}
+  .gh-mark-bar::-webkit-scrollbar{display:none}
+  .gh-mark-bar .btn{flex:0 0 auto;min-height:44px;min-width:44px}
+  .gh-mark-bar .gh-sep{display:none}
+  .gh-mark-bar .gh-save{margin-left:4px}
+  body{padding-bottom:78px}
+}
+@media (max-width:760px){
+  .shell{grid-template-columns:1fr}
+  .side{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;gap:2px;padding:10px 12px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;z-index:5}
+  .side .brand{padding:0 10px 0 4px}.side .brand .kicker{display:none}.side .brand h3{font-size:14px;white-space:nowrap}
+  .nav-item{padding:7px 10px;font-size:13px}.nav-item .cnt{display:none}
+  .side .foot{margin:0 0 0 auto;border:none;padding:0 4px;display:flex;align-items:center;gap:8px}.side .foot #who{display:none}
+  .main{padding:18px 16px}
+  .grid2{grid-template-columns:1fr 1fr}
+  h1{font-size:22px}
+  .subj-head{padding:10px 12px;gap:8px}.subj-head h2{font-size:16px}.subj-head .kicker{display:none}
+  .prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:100%}
+  .flow .arr{display:none}.flow{gap:8px}
+}
+@media (max-width:560px){
+  .gh-grid{grid-template-columns:repeat(2,1fr)}
+}

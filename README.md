@@ -27,3 +27,20 @@ A complete learning loop: **build a batch → PDF lands in your iCloud folder �
 - No folder linked? Export still works — the PDF just downloads.
 - Spaced repetition: rating 1–2 → due next day, 3 → 3 days, 4 → 7 days, 5 → 14 days.
 - "Explore with sample data" on the sign-in screen shows the whole app without touching your data.
+
+## File layout
+```
+learning_hub.html          49 lines — markup only: gate, shell, sidebar, #main, #toast
+css/learning_hub.css       all styles, 8 commented sections, every @media in §8
+js/learning_hub.js         app: auth, data, library / build / review / setup views
+js/ghost_test.js           ghost test: sheet, ink, marking, per-word clock, SRS ladder
+js/japanese_source.js      import from the second Supabase project (japanese_* tables)
+sql/schema.sql             run once in Supabase
+run-written-test-local.bat local server — serves the whole folder, subfolders included
+```
+`learning_hub.html` and the `.bat` stay at the repo root next to `index.html`; the
+`css/`, `js/` and `sql/` folders go beside them. All paths in the HTML are already
+relative (`css/…`, `js/…`), so nothing to edit after copying.
+
+Your existing `index.html` is untouched and keeps loading whatever it loads today —
+if it also pulls `ghost_test.js`, repoint that one tag at `js/ghost_test.js`.
