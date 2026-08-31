@@ -8,7 +8,7 @@ const DAY = 864e5;
 const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 
-let SESSION=null, ROLE=null, DEMO=false, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
+let SESSION=null, DEMO=false, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
 let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
@@ -23,85 +23,24 @@ const idb = {
 
 function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms); }
 
-/* ---------- sidebar collapse ----------------------------------------
-   data-icon feeds the collapsed rail's ::before glyph. */
-const NAV_ICONS={library:'▤', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
-(function initNav(){
-  for(const el of document.querySelectorAll('.nav-item')) el.dataset.icon=NAV_ICONS[el.dataset.nav]||'•';
-  const b=document.getElementById('nav-toggle'); if(!b) return;
-  const set=on=>{ document.body.classList.toggle('nav-collapsed',on);
-    b.title=b.ariaLabel=on?'Expand sidebar':'Collapse sidebar';
-    try{ localStorage.setItem('lh-nav-collapsed', on?'1':'0'); }catch(e){}
-    if(window.ghResizeSoon) ghResizeSoon(); };
-  let saved='0'; try{ saved=localStorage.getItem('lh-nav-collapsed')||'0'; }catch(e){}
-  set(saved==='1');
-  b.addEventListener('click',()=>set(!document.body.classList.contains('nav-collapsed')));
-})();
-
-/* ---------- auth ----------------------------------------------------
-   Google is the way in. The magic link is still here behind "use an email
-   link instead", because Supabase's built-in mailer rate-limits at a few
-   sends an hour and will lock you out mid-session.
-   Only emails listed in authentication_mode_user_roles get through; anyone
-   else is signed straight back out. That table needs a self-read policy —
-   see sql/auth_allowlist.sql.
-------------------------------------------------------------------- */
-const AUTH_TABLE='authentication_mode_user_roles';
-
-$('google-btn').addEventListener('click', async ()=>{
-  const m=$('gate-msg'); m.className='msg'; m.textContent='Opening Google…';
-  const {error}=await sb.auth.signInWithOAuth({provider:'google',
-    options:{redirectTo:location.href.split('#')[0], queryParams:{prompt:'select_account'}}});
-  if(error){ m.className='msg err'; m.textContent=error.message; }
-});
-$('email-toggle').addEventListener('click', e=>{ e.preventDefault(); $('email-row').classList.toggle('hide'); $('email').focus(); });
+/* ---------- auth ---------- */
 $('send-link').addEventListener('click', async ()=>{
   const email=$('email').value.trim(), m=$('gate-msg');
   if(!email){ m.className='msg err'; m.textContent='Enter your email first.'; return; }
   const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.href.split('#')[0]}});
   m.className=error?'msg err':'msg ok';
-  m.textContent=error
-    ? (/rate limit/i.test(error.message)
-        ? 'Email limit hit — Supabase only sends a few links an hour. Use Continue with Google instead.'
-        : error.message)
-    : 'Check your inbox for the magic link, then return here.';
+  m.textContent=error?error.message:'Check your inbox for the magic link, then return here.';
 });
 $('email').addEventListener('keydown', e=>{ if(e.key==='Enter') $('send-link').click(); });
 $('signout').addEventListener('click', async e=>{ e.preventDefault(); if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; });
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
-
-/* returns the allowlist row, null if not listed, or {error} if unreadable */
-async function authRole(email){
-  if(!email) return null;
-  const {data,error}=await sb.from(AUTH_TABLE).select('email,role,name').ilike('email',email).limit(1);
-  if(error) return {error:error.message};
-  return (data&&data[0])||null;
-}
-async function admit(s){
-  if(!s||SESSION||DEMO) return;
-  const email=(s.user&&s.user.email||'').trim();
-  const row=await authRole(email);
-  if(row&&row.error){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent='Could not read the access list ('+row.error+'). Run sql/auth_allowlist.sql.';
-    await sb.auth.signOut(); return;
-  }
-  if(!row){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent=email+' is not on the access list. Ask Aniket to add you.';
-    await sb.auth.signOut(); return;
-  }
-  ROLE=row.role||'operator';
-  SESSION=s;
-  boot();
-}
-sb.auth.onAuthStateChange((_e,s)=>{ admit(s); });
-sb.auth.getSession().then(({data})=>{ admit(data.session); });
+sb.auth.onAuthStateChange((_e,s)=>{ if(s && !SESSION && !DEMO){ SESSION=s; boot(); } });
+sb.auth.getSession().then(({data})=>{ if(data.session && !DEMO){ SESSION=data.session; boot(); } });
 
 /* ---------- data ---------- */
 async function boot(){
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
-  $('who').textContent = DEMO ? 'demo mode — nothing is saved' : ((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
+  $('who').textContent = DEMO ? 'demo mode — nothing is saved' : (SESSION.user.email||SESSION.user.id);
   if(!DEMO){
     const [t,p,a,b,s] = await Promise.all([
       sb.from('written_test_topics').select('*').order('branch_no'),

@@ -45,8 +45,6 @@ function renderGhost(){
       <button class="btn sm ghost gh-t ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
       <button class="btn sm ghost gh-t ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
       <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
-      <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
-      <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
       <button class="btn sm ghost gh-t" onclick="ghClearMarks()">Clear marks</button>
       <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()">Ghost</button>
       <button class="btn sm gh-save" onclick="ghSave()">Save results</button>
@@ -341,29 +339,6 @@ function ghInit(){
   ghStartClock();
   ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
-/* layout changed (sidebar, fullscreen, rotate) — the canvas is sized in
-   device pixels off the sheet's box, so it must be re-measured after the
-   new layout settles, then repainted from the stroke list. */
-let ghRzT=0;
-window.ghResizeSoon=()=>{ clearTimeout(ghRzT); ghRzT=setTimeout(()=>{ ghResize(); }, 60); };
-window.ghFull=(on)=>{
-  const want = on===undefined ? !document.body.classList.contains('gh-full') : !!on;
-  document.body.classList.toggle('gh-full', want);
-  const el=document.documentElement;
-  try{
-    if(want && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
-    else if(!want && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
-  }catch(e){}
-  const b=document.querySelector('.gh-full-btn'); if(b) b.classList.toggle('on', want);
-  ghResizeSoon();
-};
-addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement) document.body.classList.remove('gh-full'); ghResizeSoon(); });
-addEventListener('orientationchange',()=>ghResizeSoon());
-addEventListener('keydown',e=>{
-  if(e.target&&/input|select|textarea/i.test(e.target.tagName)) return;
-  if(e.key==='f'||e.key==='F') ghFull();
-  if(e.key==='Escape'&&document.body.classList.contains('gh-full')) ghFull(false);
-});
 function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1; ghCv.width=r.width*d; ghCv.height=r.height*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
 /* strokes anchor to the item cell they start in, so re-queueing keeps ink with its question */
 function ghOwner(p){

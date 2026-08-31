@@ -150,37 +150,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .jp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}
 .jp-grid .card:hover{border-color:#c0392b}
 
-/* ---- 7f · sidebar collapse ------------------------------------------
-   Two states. Collapsed on desktop leaves a 56px icon rail; collapsed on
-   the iPad's narrow layout drops the row to a single toggle so the sheet
-   gets the whole screen. State persists in localStorage.
---------------------------------------------------------------------- */
-.nav-toggle{position:absolute;top:16px;right:10px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;border:1px solid var(--line);background:#fff;color:var(--soft);border-radius:7px;cursor:pointer;padding:0}
-.nav-toggle:hover{border-color:var(--ink);color:var(--ink)}
-.side{position:relative}
-body.nav-collapsed .shell{grid-template-columns:56px 1fr}
-body.nav-collapsed .side{padding:22px 8px;align-items:center}
-body.nav-collapsed .side .brand,body.nav-collapsed .nav-item span,body.nav-collapsed .side .foot #who,body.nav-collapsed .side .foot a{display:none}
-body.nav-collapsed .nav-item{justify-content:center;padding:9px 0;font-size:0}
-body.nav-collapsed .nav-item::before{content:attr(data-icon);font-size:15px;line-height:1}
-body.nav-collapsed .nav-toggle{top:10px;right:auto;left:50%;transform:translateX(-50%) rotate(180deg)}
-body.nav-collapsed .side .foot{border:none;padding:0}
-
-/* ---- 7g · ghost test fullscreen ------------------------------------
-   Hides the chrome and gives the sheet the viewport. Works with or
-   without the real Fullscreen API — the class alone is enough on iPad,
-   where Safari denies requestFullscreen on non-video elements.
---------------------------------------------------------------------- */
-body.gh-full .side{display:none}
-body.gh-full .shell{grid-template-columns:1fr}
-body.gh-full .main{max-width:none;padding:8px 10px 0}
-body.gh-full .gh-bar,body.gh-full .gh-mark-bar{margin-bottom:8px}
-body.gh-full .gh-sheet{border-radius:0;box-shadow:none;min-height:calc(100vh - 132px)}
-body.gh-full h1,body.gh-full .gh-hd .s,body.gh-full .gh-inst{display:none}
-body.gh-full .gh-exit{display:inline-flex!important}
-.gh-exit{display:none!important}
-.gh-full-btn.on{background:var(--ink);border-color:var(--ink);color:#fff}
-
 /* ---- 8 · responsive (widest → narrowest) --------------------------- */
 @media (max-width:1040px){
   .gh-grid{grid-template-columns:repeat(3,1fr)}
@@ -196,11 +165,6 @@ body.gh-full .gh-exit{display:inline-flex!important}
 }
 @media (max-width:760px){
   .shell{grid-template-columns:1fr}
-  .nav-toggle{position:static;margin-left:auto;flex:0 0 auto}
-  body.nav-collapsed .shell{grid-template-columns:1fr}
-  body.nav-collapsed .side{padding:6px 10px;align-items:center}
-  body.nav-collapsed .side .nav-item{display:none}
-  body.nav-collapsed .nav-toggle{position:static;transform:rotate(90deg);margin-left:auto}
   .side{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;gap:2px;padding:10px 12px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;z-index:5}
   .side .brand{padding:0 10px 0 4px}.side .brand .kicker{display:none}.side .brand h3{font-size:14px;white-space:nowrap}
   .nav-item{padding:7px 10px;font-size:13px}.nav-item .cnt{display:none}

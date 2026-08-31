@@ -15,14 +15,12 @@
 <div id="gate" class="gate-wrap">
   <div class="gate-box card">
     <h1 style="margin:0 0 10px">Learning Hub</h1>
-    <p style="color:var(--soft);margin:0 0 18px">Build problem batches, export them to your iPad, and let Cowork grade your handwritten work.</p>
-    <button id="google-btn" class="btn" style="width:100%;justify-content:center;padding:12px 18px;font-size:14px">Continue with Google</button>
-    <div id="email-row" class="hide" style="display:flex;gap:10px;margin-top:12px">
+    <p style="color:var(--soft);margin:0 0 16px">Build problem batches, export them to your iPad, and let Cowork grade your handwritten work. Sign in with your email.</p>
+    <div style="display:flex;gap:10px">
       <input id="email" type="email" placeholder="you@example.com" style="flex:1">
-      <button id="send-link" class="btn ghost">Send link</button>
+      <button id="send-link" class="btn">Send link</button>
     </div>
     <div id="gate-msg" class="msg"></div>
-    <p style="margin:12px 0 0;font-size:12.5px"><a href="#" id="email-toggle">Use an email link instead</a></p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <button id="demo-btn" class="btn ghost sm">Explore with sample data</button>
     </div>
@@ -32,7 +30,6 @@
 <div id="app" class="shell hide">
   <aside class="side">
     <div class="brand"><h3>Learning Hub</h3></div>
-    <button id="nav-toggle" class="nav-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
     <a class="nav-item" href="#library" data-nav="library">Library <span class="cnt" id="cnt-lib"></span></a>
     <a class="nav-item" href="#build" data-nav="build">Build a batch <span class="cnt" id="cnt-due"></span></a>
     <a class="nav-item" href="#review" data-nav="review">Review <span class="cnt" id="cnt-fb"></span></a>

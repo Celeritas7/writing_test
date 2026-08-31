@@ -1,11 +1,11 @@
 @echo off
 title Written Test - Learning Hub local server
 REM ---------------------------------------------------------------------
-REM Put this .bat in your writing_test folder (next to index.html)
+REM Put this .bat in your writing_test folder (next to learning_hub.html)
 REM and double-click it. Leave this window open while using the app.
 REM
 REM Expected layout:
-REM   index.html
+REM   learning_hub.html
 REM   css\learning_hub.css
 REM   js\learning_hub.js  js\ghost_test.js  js\japanese_source.js
 REM   sql\*.sql            (not served, just kept here)
@@ -32,7 +32,7 @@ if defined MISSING (
   echo.
   echo   Missing:%MISSING%
   echo.
-  echo   This .bat must sit in the folder that holds index.html,
+  echo   This .bat must sit in the folder that holds learning_hub.html,
   echo   with the css\ and js\ folders beside it.
   echo   Current folder: %CD%
   echo.
