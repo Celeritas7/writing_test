@@ -5,9 +5,38 @@ const JP = {
   key: (typeof JP_ANON_KEY!=='undefined' && JP_ANON_KEY) || ''
 };
 window.JP=JP;
-let JPS = {tab:'goi', levels:null, books:null, chapters:null, topics:null, book:null, level:null, days:null, err:null, busy:false, n:20, conn:false, mode:'weak', dir:'k2r', newRate:10, dueCount:null, streak:0};
+let JPS = {tab:'goi', levels:null, books:null, chapters:null, topics:null, book:null, level:null, days:null, err:null, busy:false, n:20, conn:false, mode:'weak', dir:'auto', newRate:10, dueCount:null, streak:0};
 const JP_MODES=[['weak','Weak first'],['due','Due for review'],['new','Not yet tested'],['random','Random']];
-const JP_DIRS=[['k2r','漢字 → reading'],['r2k','かな → kanji'],['mix','Mixed']];
+const JP_DIRS=[['auto','Auto'],['k2r','漢字 → reading'],['r2k','かな → kanji']];
+/* One direction per word, never twice on a sheet. Auto picks per word from
+   its two review rows: the direction that is due (or more overdue) wins; a
+   word never tested in 'write' gets 'read' first; a word never tested at all
+   is 'read'. `force` may name a direction for a word (Sequence mode). */
+async function jpDirections(kanjis, force){
+  const out={}; for(const k of kanjis) out[k]=force&&force[k]||'read';
+  if(JPS.dir==='k2r'){ return out; }
+  if(JPS.dir==='r2k'){ for(const k of kanjis) out[k]='write'; return out; }
+  try{
+    const inList='('+kanjis.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
+    const {rows}=await jpGet(`japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=kanji,direction,next_review,last_rating&limit=5000`);
+    const by={}; for(const r of rows) (by[r.kanji]=by[r.kanji]||{})[r.direction||'read']=r;
+    const today=new Date().toISOString().slice(0,10);
+    for(const k of kanjis){
+      if(force&&force[k]) continue;
+      const rd=by[k]&&by[k].read, wr=by[k]&&by[k].write;
+      if(!rd){ out[k]='read'; continue; }                       // read comes first
+      if(!wr){ out[k]=(rd.last_rating||0)>=5?'write':'read'; continue; }   // read solid → start writing
+      const rdDue=(rd.next_review||'')<=today, wrDue=(wr.next_review||'')<=today;
+      if(rdDue!==wrDue) out[k]=rdDue?'read':'write';
+      else out[k]=(wr.next_review||'')<=(rd.next_review||'')?'write':'read';
+    }
+  }catch(e){}
+  return out;
+}
+function jpItems(rows, dirs){
+  return rows.map((r,i)=>{ const rev=dirs[r.kanji]==='write';
+    return {id:'jp-'+(r.id||i), topic_id:'jp', number:i+1, unit_no:i+1, prompt:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana, kanji:r.kanji, rev, subtitle:r.meaning_en||'', src:'jp'}; });
+}
 const JP_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /* progress.user_id is a uuid in that project — only filter when we actually have one */
 function jpUserFilter(){ const u=(ghCfg().user||'').trim(); return JP_UUID.test(u)?`user_id=eq.${u}&`:''; }
@@ -57,12 +86,15 @@ window.jpStartSequence=async()=>{
   JPS.busy=true; JPS.err=null; renderGhost();
   const today=new Date().toISOString().slice(0,10);
   try{
-    const {rows:due}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji,next_review&order=next_review.asc&limit=${JPS.n}`);
+    const {rows:due}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji,direction,next_review&order=next_review.asc&limit=${JPS.n*2}`);
+    const force={}; const seenK=[];
+    for(const d of due){ if(!force[d.kanji]){ force[d.kanji]=d.direction||'read'; seenK.push(d.kanji); } }  // earliest due direction wins; a kanji once
+    const dueK=seenK.slice(0,JPS.n);
     let words=[];
-    if(due.length){
-      const inList='('+due.map(d=>'"'+String(d.kanji).replace(/"/g,'')+'"').join(',')+')';
+    if(dueK.length){
+      const inList='('+dueK.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
       const {rows}=await jpGet(`japanese_unified_words?kanji=in.${encodeURIComponent(inList)}&select=id,kanji,hiragana,meaning_en&limit=${JPS.n}`);
-      const pos=new Map(due.map((d,i)=>[d.kanji,i]));
+      const pos=new Map(dueK.map((k,i)=>[k,i]));
       words=rows.sort((a,b)=>(pos.has(a.kanji)?pos.get(a.kanji):999)-(pos.has(b.kanji)?pos.get(b.kanji):999));
     }
     const room=Math.min(JPS.n-words.length, JPS.newRate);
@@ -75,14 +107,14 @@ window.jpStartSequence=async()=>{
       words=words.concat(rows.filter(r=>!known.has(r.kanji)&&r.kanji&&r.hiragana).slice(0,room));
     }
     if(!words.length) throw new Error('Nothing due and no new words found — all caught up.');
-    jpSetItems(words, 'Sequence · '+due.length+' due'+(words.length>due.length?' + '+(words.length-due.length)+' new':''), true);
+    await jpSetItems(words, 'Sequence · '+dueK.length+' due'+(words.length>dueK.length?' + '+(words.length-dueK.length)+' new':''), true, force);
   }catch(e){ JPS.err=String(e.message||e); JPS.busy=false; renderGhost(); }
 };
 async function jpDueCount(){
   const today=new Date().toISOString().slice(0,10);
   try{
     const {total}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji&limit=1`, true);
-    JPS.dueCount=total;
+    JPS.dueCount=total;   // counts directions: a kanji due both ways counts twice
     const {rows}=await jpGet('japanese_user_reviews?select=last_review&order=last_review.desc&limit=400');
     const days=new Set(rows.map(r=>String(r.last_review||'').slice(0,10)).filter(Boolean));
     let st=0, d=new Date();
@@ -130,7 +162,7 @@ window.jpPanelHtml=function(){
   else if(JPS.tab==='goi') body = JPS.level ? `<button class="btn sm ghost" style="margin:12px 0" onclick="JPS.level=null;renderGhost()">← Levels</button>
       <button class="btn sm" style="margin:12px 0 12px 8px" onclick="jpStartLevel('${esc(JPS.level)}')">Whole ${esc(JPS.level)} · ranked</button>
       <div class="jp-grid">${(JPS.days||[]).map(d=>{ const lb=d.week_day_label||('Week '+d.week+' Day '+d.day);
-        return jpDayChip(lb, d.word_count||0, (JPS.done&&JPS.done[lb])||0); }).join('')||'<p style="color:var(--mute)">No lesson breakdown for this level.</p>'}</div>`
+        return jpDayChip(lb, d.word_count||0, (JPS.done&&JPS.done[lb])||{r:0,w:0}); }).join('')||'<p style="color:var(--mute)">No lesson breakdown for this level.</p>'}</div>`
     : (JPS.levels ? `<div class="jp-grid">${JPS.levels.map(l=>jpChip('JLPT '+l.level, l.total.toLocaleString()+' words', false, `jpOpenLevel('${l.level}')`)).join('')}</div>` : '');
   else if(JPS.tab==='kanji') body = JPS.books ? (JPS.book
       ? `<button class="btn sm ghost" style="margin:12px 0" onclick="JPS.book=null;renderGhost()">← Books</button>
@@ -161,12 +193,8 @@ async function jpWords(path, label, order){
   try{
     let {rows}=await jpGet(path);
     if(order&&order.length){ const pos=new Map(order.map((id,i)=>[String(id),i])); rows=rows.slice().sort((a,b)=>(pos.has(String(a.id))?pos.get(String(a.id)):1e9)-(pos.has(String(b.id))?pos.get(String(b.id)):1e9)); }
-    const usable=rows.filter(r=>r.kanji&&r.hiragana);
-    const split=JPS.dir==='mix'?Math.ceil(usable.length*0.75):(JPS.dir==='r2k'?0:usable.length);
-    const items=usable.map((r,i)=>{
-      const rev = i>=split;
-      return {id:'jp-'+(r.id||i), topic_id:'jp', number:i+1, unit_no:i+1, prompt:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana, kanji:r.kanji, rev, subtitle:r.meaning_en||'', src:'jp'};
-    });
+    const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
+    const items=jpItems(usable, await jpDirections(usable.map(r=>r.kanji)));
     if(!items.length) throw new Error('No words with both kanji and reading in that set.');
     GH.ext={label, items}; GH.marks={}; GH.strokes={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null;
   }catch(e){ JPS.err=String(e.message||e); }
@@ -233,21 +261,24 @@ function jpRank(p){ const m=String(p.marking==null?'':p.marking).toLowerCase();
   if(/4|easy/.test(m)) return 3;
   if(/5|known|perfect/.test(m)) return 4;
   return (p.times_wrong||0)>(p.times_correct||0)?0:2; }
-function jpSetItems(rows, label, seq){
+function jpUniq(rows){ const s=new Set(); return rows.filter(r=>!s.has(r.kanji)&&s.add(r.kanji)); }
+async function jpSetItems(rows, label, seq, force){
   GH.seq=!!seq;
-  const usable=rows.filter(r=>r.kanji&&r.hiragana);
+  const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
   if(!usable.length) throw new Error('No words with both kanji and reading in that set.');
-  const split=JPS.dir==='mix'?Math.ceil(usable.length*0.75):(JPS.dir==='r2k'?0:usable.length);
-  GH.ext={label, items:usable.map((r,i)=>{ const rev=i>=split;
-    return {id:'jp-'+(r.id||i), topic_id:'jp', number:i+1, unit_no:i+1, prompt:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana, kanji:r.kanji, rev, subtitle:r.meaning_en||'', src:'jp'}; })};
+  GH.ext={label, items:jpItems(usable, await jpDirections(usable.map(r=>r.kanji), force))};
   GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null; JPS.busy=false; renderGhost();
 }
+/* 読 N · 書 M of total — two bars, complete only when both reach total */
 function jpDayChip(label, total, done){
-  const left=Math.max(0,total-done), pct=total?Math.round(100*done/total):0;
-  return `<button class="card" onclick="jpStartDay('${esc(JPS.level)}','${esc(label)}')" style="text-align:left;padding:12px 14px;border:1px solid ${total&&done>=total?'#2e8b46':'var(--line)'};cursor:pointer;background:#fff">
+  const d=(done&&typeof done==='object')?done:{r:done||0,w:0};
+  const r=Math.min(d.r||0,total), w=Math.min(d.w||0,total), full=total&&r>=total&&w>=total;
+  const pr=total?Math.round(100*r/total):0, pw=total?Math.round(100*w/total):0;
+  return `<button class="card" onclick="jpStartDay('${esc(JPS.level)}','${esc(label)}')" style="text-align:left;padding:12px 14px;border:1px solid ${full?'#2e8b46':'var(--line)'};cursor:pointer;background:#fff">
     <div style="font-weight:600;font-size:14px">${esc(label)}</div>
-    <div style="font-size:12px;margin-top:2px"><span style="color:#2e8b46;font-weight:600">${done} done</span> <span style="color:var(--mute)">·</span> <span style="color:#c0392b;font-weight:600">${left} left</span> <span style="color:var(--mute)">of ${total}</span></div>
-    <div class="meter" style="margin-top:8px;height:4px"><i style="width:${pct}%;background:#2e8b46"></i></div></button>`;
+    <div style="font-size:12px;margin-top:2px"><span style="color:#2e8b46;font-weight:600">読 ${r}</span> <span style="color:var(--mute)">·</span> <span style="color:#a8281f;font-weight:600">書 ${w}</span> <span style="color:var(--mute)">of ${total}</span></div>
+    <div class="meter" style="margin-top:8px;height:3px"><i style="width:${pr}%;background:#2e8b46"></i></div>
+    <div class="meter" style="margin-top:3px;height:3px"><i style="width:${pw}%;background:#a8281f"></i></div></button>`;
 }
 window.jpOpenLevel=async lv=>{
   JPS.level=lv; JPS.days=null; JPS.busy=true; JPS.err=null; renderGhost();
@@ -263,17 +294,24 @@ window.jpOpenLevel=async lv=>{
   }
   JPS.busy=false; renderGhost();
 };
-/* how much of each lesson has already been tested (japanese_daily_test_log) */
+/* Coverage per lesson, per direction. An *attempt* counts — a row exists in
+   japanese_user_reviews whether the answer was right or wrong — so the counts
+   never drop when you get one wrong. A lesson is complete only when every
+   word has been attempted both ways. */
 async function jpCoverage(lv){
-  JPS.done={}; JPS.seen=null;
+  JPS.done={}; JPS.seen=null; JPS.seenW=null;
   try{
     const {rows:all}=await jpGet(`japanese_v_vocabulary_full?level=eq.${encodeURIComponent(lv)}&select=week_day_label,kanji&limit=20000`);
     const words={};
     for(const r of all){ (words[r.week_day_label]=words[r.week_day_label]||[]).push(r.kanji); }
-    const {rows:log}=await jpGet('japanese_user_reviews?select=kanji&limit=20000');
-    const seen=new Set(log.map(r=>r.kanji));
-    for(const k of Object.keys(words)) JPS.done[k]=words[k].filter(w=>seen.has(w)).length;
-    JPS.seen=seen;
+    const {rows:log}=await jpGet('japanese_user_reviews?select=kanji,direction&limit=20000');
+    const seen=new Set(), seenW=new Set();
+    for(const r of log){ ((r.direction||'read')==='write'?seenW:seen).add(r.kanji); }
+    for(const k of Object.keys(words)){
+      const ws=words[k];
+      JPS.done[k]={r:ws.filter(w=>seen.has(w)).length, w:ws.filter(w=>seenW.has(w)).length};
+    }
+    JPS.seen=seen; JPS.seenW=seenW;
   }catch(e){ JPS.done=null; }
 }
 window.jpStartDay=async(lv,label)=>{
@@ -282,15 +320,21 @@ window.jpStartDay=async(lv,label)=>{
   try{
     const {rows}=await jpGet(q);
     const ids=rows.map(r=>r.id).filter(v=>v!=null);
-    const untested=JPS.seen?rows.filter(r=>r.kanji&&!JPS.seen.has(r.kanji)):[];
-    if(untested.length&&untested.length<rows.length){
-      jpSetItems(untested.slice(0,JPS.n), lv+' · '+label+' · '+untested.length+' left');
+    /* prefer the direction not yet attempted: never-read words come up as read,
+       read-but-never-written words come up as write. */
+    const gap=[], force={};
+    if(JPS.seen) for(const r of rows){ if(!r.kanji) continue;
+      if(!JPS.seen.has(r.kanji)){ gap.push(r); force[r.kanji]='read'; }
+      else if(JPS.seenW&&!JPS.seenW.has(r.kanji)){ gap.push(r); force[r.kanji]='write'; } }
+    if(gap.length&&gap.length<rows.length*2){
+      const take=gap.slice(0,JPS.n);
+      await jpSetItems(take, lv+' · '+label+' · '+gap.length+' left', false, force);
       return;
     }
     const ordered=ids.length?await jpRankIds(ids):[];
     const pick=new Set(ordered.map(String));
     const chosen=(ordered.length?rows.filter(r=>pick.has(String(r.id))).sort((a,b)=>ordered.indexOf(a.id)-ordered.indexOf(b.id)):rows).slice(0,JPS.n);
-    jpSetItems(chosen, lv+' · '+label);
+    await jpSetItems(chosen, lv+' · '+label);
   }
   catch(e){ JPS.err=String(e.message||e); JPS.busy=false; renderGhost(); }
 };
@@ -320,11 +364,9 @@ window.jpStartSmart=async()=>{
       const {total}=await jpGet('japanese_unified_words?select=id&limit=1', true);
       const off=Math.floor(Math.random()*Math.max(1,total-JPS.n*8));
       const {rows}=await jpGet(`japanese_unified_words?select=id,kanji,hiragana,meaning_en&order=id&offset=${off}&limit=${JPS.n*8}`);
-      const fresh=rows.filter(r=>!seen.has(r.id)&&r.kanji&&r.hiragana).slice(0,JPS.n);
+      const fresh=jpUniq(rows.filter(r=>!seen.has(r.id)&&r.kanji&&r.hiragana)).slice(0,JPS.n);
       if(!fresh.length) throw new Error('No untested words in that slice — try again.');
-      const split=JPS.dir==='mix'?Math.ceil(fresh.length*0.75):(JPS.dir==='r2k'?0:fresh.length);
-      GH.ext={label:'Not yet tested · all levels', items:fresh.map((r,i)=>{ const rev=i>=split;
-        return {id:'jp-'+r.id, topic_id:'jp', number:i+1, unit_no:i+1, prompt:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana, kanji:r.kanji, rev, subtitle:r.meaning_en||'', src:'jp'}; })};
+      GH.ext={label:'Not yet tested · all levels', items:jpItems(fresh, await jpDirections(fresh.map(r=>r.kanji)))};
       GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.busy=false; renderGhost(); return;
     }
     await jpWords(`japanese_unified_words?id=in.(${ids.join(',')})&select=id,kanji,hiragana,meaning_en&limit=${JPS.n}`, (JP_MODES.find(m=>m[0]===JPS.mode)||[])[1]+' · all levels', ids);

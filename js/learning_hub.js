@@ -127,7 +127,7 @@ function startDemo(){
   subs.kanji_n5=['Readings: 日・月・火','Stroke order: 水・木','Vocabulary: numbers','Sentence reading','Writing from English'];
   PROBLEMS=[]; for(const t of TOPICS) subs[t.id].forEach((s,i)=>PROBLEMS.push({id:`${t.id}-${i+1}`,topic_id:t.id,number:i+1,unit_no:i+1,subtitle:s,prompt:`Sample prompt for “${s}” — sign in to load your real problem bank.`,given_data:'sample given data',tier:i===0?'warmup':i===4?'challenge':'core',kind:i<2?'drill':i<4?'concept':'applied'}));
   const KJ=[['生える','はえる'],['六人','ろくにん'],['歩く','あるく'],['先々月','せんせんげつ'],['七人','しちにん'],['一年','いちねん'],['小学校','しょうがっこう'],['少女','しょうじょ'],['千本','せんぼん'],['あの方','あのかた'],['五万円','ごまんえん'],['先週','せんしゅう'],['上手(な)','じょうず'],['休み','やすみ'],['時間','じかん'],['のぼり','上り'],['げんき','元気'],['ちいさい','小さい'],['てま','手間'],['つぶら','円ら']];
-  PROBLEMS=PROBLEMS.filter(p=>p.topic_id!=='kanji_n5').concat(KJ.map(([q,a],i)=>({id:'kanji_n5-'+(i+1),topic_id:'kanji_n5',number:i+1,unit_no:i+1,subtitle:(i<15?'Read: ':'Write: ')+q,prompt:q,answer:a,tier:i<5?'warmup':i<15?'core':'challenge',kind:i<15?'drill':'concept'})));
+  PROBLEMS=PROBLEMS.filter(p=>p.topic_id!=='kanji_n5').concat(KJ.map(([q,a],i)=>({id:'kanji_n5-'+(i+1),topic_id:'kanji_n5',number:i+1,unit_no:i+1,subtitle:(i<15?'Read: ':'Write: ')+q,prompt:q,answer:a,kanji:i<15?q:a,rev:i>=15,tier:i<5?'warmup':i<15?'core':'challenge',kind:i<15?'drill':'concept'})));
   const now=Date.now();
   ATTEMPTS=[
     {problem_id:'calculus-3',topic_id:'calculus',correct:false,rating:2,notes:'Chain rule inner derivative missed — you differentiated (3x+1)⁴ but forgot ×3. Redo with u-substitution written out.',graded_by:'cowork',graded_at:new Date(now-2*DAY).toISOString()},
