@@ -1,5 +1,5 @@
 /* Ghost test — on-screen handwritten sheet with answer overlay. Depends on globals from learning_hub.js */
-let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[], brush:0, time:{}, focus:null, act:0, limit:{}, finger:(()=>{try{return localStorage.getItem('gh-finger')==='1'}catch(e){return false}})(), drawer:(()=>{try{return localStorage.getItem('gh-drawer')==='1'}catch(e){return false}})(), more:false};
+let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[], brush:0, time:{}, focus:null, act:0, limit:{}, finger:(()=>{try{return localStorage.getItem('gh-finger')==='1'}catch(e){return false}})(), tuck:(()=>{try{return localStorage.getItem('gh-tuck')==='1'}catch(e){return false}})()};
 const GH_W=[1.6,2.6,4.2];
 
 const GH_LANG=/lang|japan|kanji|kana|vocab|word/i;
@@ -21,7 +21,7 @@ function renderGhost(){
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
-    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
+    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
   }).join('');
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
   const inst = nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
@@ -36,29 +36,22 @@ function renderGhost(){
       <button class="btn sm ghost gh-t" id="gh-erase" onclick="ghTool('erase')">◌ Eraser</button>
       <button class="btn sm ghost gh-t" id="gh-width" onclick="ghWidth()">Width: M</button>
       <button class="btn sm ghost gh-t ${GH.finger?'on':''}" id="gh-finger" onclick="ghFinger()" title="Write with your finger (page won't scroll while on)">☝ Finger</button>
+      <button class="btn sm ghost gh-t" onclick="ghUndo()">↶ Undo</button>
+      <button class="btn sm ghost gh-t" onclick="ghClear()">Clear ink</button>
     </div>
-    <div class="gh-dock"><button class="gh-open" onclick="ghDrawer(true)"><span>◔ Mark &amp; save</span><span class="gh-cnt" id="gh-cnt">0 / ${GH.items.length} marked</span></button></div>
-    <div class="gh-veil"></div>
-    <div class="gh-drawer">
-      <div class="gh-strip">
-        <button class="btn sm ghost gh-t gh-mk-b ${GH.brush===0?'on':''}" onclick="ghBrush(0)">Tap</button>
-        <button class="btn sm ghost gh-t gh-mk-b ${GH.brush===1?'on':''}" onclick="ghBrush(1)">✓</button>
-        <button class="btn sm ghost gh-t gh-mk-b ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
-        <button class="btn sm ghost gh-t gh-mk-b ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
-        <button class="btn sm ghost gh-t gh-more ${GH.more?'on':''}" onclick="ghMore()" title="More controls">⋯</button>
-        <button class="btn sm ghost gh-t gh-x" onclick="ghDrawer(false)" title="Close">✕</button>
-      </div>
-      <div class="gh-rest">
-        <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
-        <button class="btn sm ghost gh-t" onclick="ghClearMarks()">Clear marks</button>
-        <button class="btn sm ghost gh-t" onclick="ghUndo()">↶ Undo</button>
-        <button class="btn sm ghost gh-t" onclick="ghClear()">Clear ink</button>
-        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()">Ghost</button>
-        <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
-        <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
-        <button class="btn sm ghost gh-t" onclick="ghImportPanel()">目 Import</button>
-        <button class="btn sm gh-save" onclick="ghSave()">Save results</button>
-      </div>
+    <div class="gh-mark-bar">
+      <span class="gh-sep">Mark by</span>
+      <button class="btn sm ghost gh-t ${GH.brush===0?'on':''}" onclick="ghBrush(0)">Tap</button>
+      <button class="btn sm ghost gh-t ${GH.brush===1?'on':''}" onclick="ghBrush(1)">✓</button>
+      <button class="btn sm ghost gh-t ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
+      <button class="btn sm ghost gh-t ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
+      <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
+      <button class="btn sm ghost gh-t gh-tuck-btn ${GH.tuck?'on':''}" onclick="ghTuck()" title="Hide the page header and nav for writing">▤ Header</button>
+      <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
+      <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
+      <button class="btn sm ghost gh-t" onclick="ghClearMarks()">Clear marks</button>
+      <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()">Ghost</button>
+      <button class="btn sm gh-save" onclick="ghSave()">Save results</button>
     </div>
     <div class="gh-sheet ${GH.ghost?'ghost-on':''}" id="gh-sheet">
       <div class="gh-hd"><h2>${esc(label||'Ghost test')}</h2><span class="s">|</span><span class="tt">Ghost test</span><span class="nm">名前 <u></u></span><span class="sc">得点 <b id="gh-score">___</b> / ${GH.items.length}</span></div>
@@ -206,8 +199,7 @@ function ghRequeue(id){
   toast('✗ '+(src.kanji||src.prompt)+' — back in 5 words.', 2600);
   renderGhost();
 }
-function ghScore(){ let s=0,any=false,n=0; for(const p of GH.items){ const m=GH.marks[p.id]||0; if(m){any=true; n++; s+=m===1?1:m===2?.5:0;} } $('gh-score').textContent=any?(s%1?s.toFixed(1):s):'___';
-  const c=$('gh-cnt'); if(c) c.textContent=n+' / '+GH.items.length+' marked'; }
+function ghScore(){ let s=0,any=false; for(const p of GH.items){ const m=GH.marks[p.id]||0; if(m){any=true; s+=m===1?1:m===2?.5:0;} } $('gh-score').textContent=any?(s%1?s.toFixed(1):s):'___'; }
 
 /* ---- per-word clock -------------------------------------------------
    Time runs from the moment an item gets focus (you start writing in it,
@@ -277,8 +269,6 @@ function ghSetMark(id, m){
     const el=cell.querySelector('.gh-mk');
     el.textContent=['','✓','△','✗'][m];
     el.className='gh-mk '+['','ok','mid','bad'][m];
-    const n=cell.querySelector('.gh-n');
-    if(n) n.className='gh-n'+(m?' m'+m:'');
   }
   ghScore();
   if(m===3&&GH.seq) ghRequeue(id);
@@ -349,72 +339,25 @@ function ghInit(){
     ghCur=null; ghRedraw();
   };
   ghApplyFinger();
-  ghInitUndoTap();
-  document.body.classList.toggle('gh-drawer-on', !!GH.drawer);
-  document.body.classList.toggle('gh-more-on', !!GH.more);
+  document.body.classList.toggle('gh-tuck', !!GH.tuck);
   addEventListener('resize',ghResize);
   ghInitBrush();
   ghStartClock();
   ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
-/* marking drawer. Closed, the bottom is one ◔ Mark & save bar carrying the
-   marked count; open, it is the marker strip plus ⋯ (Rest/Clear/Undo/Ghost/
-   Full screen/Import/Save) and ✕. It stays open across marks and across
-   reloads, floats over the sheet, and on desktop docks bottom-right. */
-window.ghDrawer=on=>{
-  GH.drawer=!!on;
-  try{ localStorage.setItem('gh-drawer', GH.drawer?'1':'0'); }catch(e){}
-  document.body.classList.toggle('gh-drawer-on', GH.drawer);
+/* header tuck: on phones the nav row, page title, intro and pills eat most of
+   the screen. Tucking hides them and pins the pen bar to the top, leaving the
+   sheet and the fixed mark bar. Toggle lives in the mark bar so it is always
+   reachable. */
+window.ghTuck=()=>{
+  GH.tuck=!GH.tuck;
+  try{ localStorage.setItem('gh-tuck', GH.tuck?'1':'0'); }catch(e){}
+  document.body.classList.toggle('gh-tuck', GH.tuck);
+  const b=document.querySelector('.gh-tuck-btn'); if(b) b.classList.toggle('on', GH.tuck);
+  toast(GH.tuck ? 'Header hidden — tap ▤ Header to bring the tabs back'
+                : 'Header shown', 2200);
+  ghResizeSoon();
 };
-window.ghMore=()=>{
-  GH.more=!GH.more;
-  document.body.classList.toggle('gh-more-on', GH.more);
-  const b=document.querySelector('.gh-more'); if(b) b.classList.toggle('on', GH.more);
-};
-/* two-finger tap on the sheet = undo one stroke. Fires immediately, then
-   repeats every 0.5s after a 0.6s hold. Cancelled by >12px of drift (that is
-   a scroll or a pinch) and ignored while the Pencil is down (palm rejection).
-   Works whether or not Finger mode is on. Undo also stays in the drawer. */
-function ghInitUndoTap(){
-  const sh=$('gh-sheet'); if(!sh||sh._utap) return; sh._utap=1;
-  let t0=null,t1=null,first=null,rep=0,hold=0,dead=false,lead=0,saved=null;
-  const stop=()=>{ clearTimeout(hold); clearTimeout(lead); clearInterval(rep); hold=rep=lead=0; t0=t1=null; saved=null; dead=false; };
-  const fire=()=>{ if(!GH.strokes.length) return stop(); saved=GH.strokes[GH.strokes.length-1]; ghUndo(); toast('Undid stroke', 1200); };
-  if(!window._ghPenTrack){
-    window._ghPenTrack=1;
-    addEventListener('pointerup',e=>{ if(e.pointerType==='pen') GH.penDown=false; },true);
-    addEventListener('pointercancel',e=>{ if(e.pointerType==='pen') GH.penDown=false; },true);
-  }
-  sh.addEventListener('pointerdown',e=>{ if(e.pointerType==='pen') GH.penDown=true; },true);
-  sh.addEventListener('touchstart',e=>{
-    if(e.touches.length!==2||GH.penDown||dead) return;
-    t0=e.touches[0]; t1=e.touches[1];
-    first=[t0.clientX,t0.clientY,t1.clientX,t1.clientY];
-    e.preventDefault();
-    ghUndoSeen();
-    lead=setTimeout(()=>{ lead=0; if(dead) return; fire();
-      hold=setTimeout(()=>{ rep=setInterval(fire,500); },600); },120);
-  },{passive:false});
-  sh.addEventListener('touchmove',e=>{
-    if(!first||e.touches.length!==2) return;
-    const a=e.touches[0],b=e.touches[1];
-    const d=Math.max(Math.hypot(a.clientX-first[0],a.clientY-first[1]),
-                     Math.hypot(b.clientX-first[2],b.clientY-first[3]));
-    if(d>12){ dead=true; clearTimeout(lead); clearTimeout(hold); clearInterval(rep); hold=rep=lead=0;
-      if(saved){ GH.strokes.push(saved); saved=null; ghRedraw&&ghRedraw(); } }
-  },{passive:true});
-  sh.addEventListener('touchend',()=>{ first=null; stop(); });
-  sh.addEventListener('touchcancel',()=>{ first=null; stop(); });
-  ghUndoHint();
-}
-/* one-time discovery hint, touch devices only, shown when the sheet opens. */
-function ghUndoHint(){
-  if(!matchMedia('(hover:none)').matches) return;
-  try{ if(localStorage.getItem('gh-undo-hint')) return; }catch(e){ return; }
-  setTimeout(()=>toast('Two-finger tap to undo a stroke', 3200), 900);
-  ghUndoSeen();
-}
-function ghUndoSeen(){ try{ localStorage.setItem('gh-undo-hint','1'); }catch(e){} }
 /* finger writing. Off by default so a touch-drag scrolls the page; on, the
    canvas swallows touch (touch-action:none) and finger strokes ink like the
    Pencil. Pencil always writes either way. */

@@ -105,8 +105,24 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 /* 7a · toolbars. Pen/eraser/width in .gh-bar stay at the top; the marking
    controls in .gh-mark-bar go fixed-bottom on phones (see §8). */
 .gh-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.gh-mark-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-.gh-mark-bar .gh-save{margin-left:auto}
+/* 7a-2 · the marking drawer. Closed: one ◔ Mark & save bar (fixed bottom on
+   touch widths, floating bottom-right on desktop). Open: marker strip + ⋯ row.
+   Both float over the sheet; only a soft veil sits behind the drawer so the
+   sheet above it stays readable and tappable. */
+.gh-dock{position:fixed;left:auto;right:18px;bottom:18px;z-index:30;display:flex}
+.gh-open{display:inline-flex;align-items:center;gap:14px;font:600 14px/1 "Space Grotesk",sans-serif;min-height:48px;padding:0 20px;border-radius:14px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;box-shadow:0 10px 26px -14px rgba(0,0,0,.55)}
+.gh-cnt{font:500 12px/1 "IBM Plex Mono",monospace;opacity:.72}
+.gh-drawer{position:fixed;right:18px;bottom:18px;width:min(560px,calc(100vw - 36px));z-index:31;transform:translateY(calc(100% + 24px));transition:transform .22s ease;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px;box-shadow:0 18px 44px -22px rgba(0,0,0,.45)}
+.gh-veil{display:none}
+body.gh-drawer-on .gh-drawer{transform:translateY(0)}
+body.gh-drawer-on .gh-dock{display:none}
+.gh-strip{display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.gh-strip::-webkit-scrollbar{display:none}
+.gh-strip .gh-mk-b{flex:1 1 0;justify-content:center;min-width:54px}
+.gh-strip .gh-more{margin-left:auto}
+.gh-rest{display:none;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+body.gh-more-on .gh-rest{display:flex}
+.gh-rest .gh-save{margin-left:auto}
 .gh-sep{font:600 10px/1 "IBM Plex Mono",monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);padding-left:8px;margin-left:4px;border-left:1px solid var(--line);align-self:center}
 .gh-t.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .gh-ghost{background:transparent;color:#c0392b;border:1px solid #c0392b}
@@ -123,16 +139,18 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .gh-hd .sc{font-size:14px;font-weight:600}
 .gh-hd .sc b{display:inline-block;min-width:38px;border-bottom:1.5px solid var(--ink);text-align:center;color:#c0392b}
 .gh-inst{color:var(--mute);font-size:13px;margin:10px 0 22px}
-.gh-grid{display:grid;grid-template-columns:repeat(5,1fr);column-gap:24px}
+.gh-grid{display:grid;grid-template-columns:repeat(5,1fr);column-gap:24px;min-width:0}
+.gh-grid>*{min-width:0}
 .gh-rule{grid-column:1/-1;border-top:1.5px solid #bbb;margin:2px 0 18px}
-#gh-ink{position:absolute;inset:0;z-index:1;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#gh-ink{position:absolute;inset:0;z-index:1;width:100%;height:100%;touch-action:auto;cursor:crosshair}
 
 /* 7c · one item */
 .gh-item{position:relative;padding:6px 0 108px}
 .gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
 .gh-n:hover{background:#f1efe7}
 .gh-w{font-size:17px;border-bottom:1.5px solid var(--ink);padding-bottom:1px}
-.gh-mk{position:absolute;top:0;right:2px;font-size:17px;font-weight:700}
+.gh-mk{position:absolute;top:4px;right:8px;font-size:16px;font-weight:700}
+.gh-n.m1{color:#2e8b46}.gh-n.m2{color:#d98216}.gh-n.m3{color:#c0392b}
 .gh-mk.ok{color:#2e8b46}.gh-mk.mid{color:#d98216}.gh-mk.bad{color:#c0392b}
 .gh-g{position:absolute;left:0;right:4px;top:38px;font-size:19px;line-height:1.15;color:#c0392b;opacity:0;transition:opacity .15s;pointer-events:none;overflow-wrap:anywhere}
 .gh-sheet.ghost-on .gh-g{opacity:.45}
@@ -176,8 +194,6 @@ body.gh-full .side{display:none}
 body.gh-full .shell{grid-template-columns:1fr;height:100dvh;min-height:0}
 body.gh-full .main{max-width:none;height:100%;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;padding:8px 10px calc(64px + env(safe-area-inset-bottom))}
 body.gh-full .gh-bar{flex:0 0 auto;margin-bottom:8px}
-body.gh-full .gh-mark-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;padding:6px 10px calc(6px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line)}
-body.gh-full .gh-mark-bar .btn{flex:0 0 auto;min-height:44px}
 body.gh-full .gh-sheet{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;border-radius:0;box-shadow:none;padding:12px 22px 8px}
 body.gh-full .gh-hd h2{font-size:16px}
 body.gh-full .gh-grid{flex:1 1 auto;min-height:0;grid-template-columns:repeat(5,1fr);grid-auto-rows:minmax(0,1fr);margin-top:8px}
@@ -186,6 +202,14 @@ body.gh-full .gh-item{padding:4px 0 8px}
 body.gh-full h1,body.gh-full .main>.kicker,body.gh-full .main>p,body.gh-full .pillbar,body.gh-full .gh-hd .s,body.gh-full .gh-inst{display:none}
 body.gh-full .gh-exit{display:inline-flex!important}
 @media (max-width:900px){body.gh-full .gh-grid{grid-template-columns:repeat(4,1fr)}}
+/* phones: 20 items cannot fit one screen at a usable size, so fullscreen keeps
+   the toolbars pinned and scrolls the sheet body instead of clipping columns. */
+@media (max-width:820px){
+  body.gh-full .gh-sheet{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 14px 16px}
+  body.gh-full .gh-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:auto;column-gap:14px;flex:0 0 auto}
+  body.gh-full .gh-item{padding:4px 0 84px}
+  body.gh-full .gh-hd{flex-wrap:wrap}
+}
 .gh-exit{display:none!important}
 .gh-full-btn.on{background:var(--ink);border-color:var(--ink);color:#fff}
 
@@ -194,13 +218,20 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .gh-grid{grid-template-columns:repeat(3,1fr)}
   .gh-sheet{padding:22px 18px 36px}
 }
+/* 8a · touch widths: pen tools pin to the top, the drawer spans the bottom. */
 @media (max-width:820px){
-  .gh-mark-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--line);box-shadow:0 -10px 26px -20px rgba(0,0,0,.55)}
-  .gh-mark-bar::-webkit-scrollbar{display:none}
-  .gh-mark-bar .btn{flex:0 0 auto;min-height:44px;min-width:44px}
-  .gh-mark-bar .gh-sep{display:none}
-  .gh-mark-bar .gh-save{margin-left:4px}
-  body{padding-bottom:78px}
+  .gh-bar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:0;z-index:6;background:var(--bg);padding:6px 0;margin-bottom:8px}
+  .gh-bar::-webkit-scrollbar{display:none}
+  .gh-bar .btn{flex:0 0 auto;min-height:40px}
+  .gh-dock{left:0;right:0;bottom:0;padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
+  .gh-open{flex:1 1 auto;justify-content:space-between;min-height:50px}
+  .gh-drawer{left:0;right:0;bottom:0;width:auto;border-radius:16px 16px 0 0;border-left:none;border-right:none;border-bottom:none;padding:10px 10px calc(12px + env(safe-area-inset-bottom));transform:translateY(112%)}
+  .gh-veil{display:block;position:fixed;left:0;right:0;bottom:0;height:190px;z-index:30;background:linear-gradient(to top,rgba(22,36,29,.16),rgba(22,36,29,0));opacity:0;pointer-events:none;transition:opacity .2s}
+  body.gh-drawer-on .gh-veil{opacity:1}
+  .gh-strip .btn{min-height:44px}
+  html,body{max-width:100%;overflow-x:hidden}
+  .main,.gh-sheet,.gh-grid,.gh-item{min-width:0}
+  body{padding-bottom:82px}
 }
 @media (max-width:760px){
   .shell{grid-template-columns:1fr}
@@ -220,6 +251,23 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:100%}
   .flow .arr{display:none}.flow{gap:8px}
 }
+/* 8b · phones: two columns, 88px of writing room per word, free scrolling,
+   and no page header above the sticky pen bar. */
 @media (max-width:560px){
-  .gh-grid{grid-template-columns:repeat(2,1fr)}
+  .main>.kicker,.main>h1,.main>p,.pillbar,.gh-inst,.gh-hd .s,.gh-hd .tt,.gh-hd .nm{display:none}
+  .main{padding:0 0 12px}
+  .gh-sheet{border-left:none;border-right:none;border-radius:0;box-shadow:none;padding:10px 0 6px;min-height:0}
+  .gh-hd{padding:0 12px 8px}
+  .gh-hd h2{font-size:16px}
+  .gh-grid{grid-template-columns:1fr 1fr;column-gap:0;background:linear-gradient(to right,transparent calc(50% - .5px),#ece7db calc(50% - .5px),#ece7db calc(50% + .5px),transparent calc(50% + .5px))}
+  .gh-rule{display:none}
+  .gh-item{padding:8px 10px 88px;border-bottom:1px solid #ece7db}
+  .gh-g{left:10px;right:10px;top:42px}
+  .gh-w{font-size:18px}
+  /* the mark glyph rides beside the number instead of the cell's right edge,
+     so the right-hand column can never clip it. */
+  .gh-mk{position:static;margin-left:6px;font-size:15px}
+  body.gh-full .gh-grid{grid-template-columns:1fr 1fr}
+  body.gh-full .gh-item{padding:8px 10px 88px}
+  body.gh-full .gh-sheet{padding:10px 0 6px}
 }
