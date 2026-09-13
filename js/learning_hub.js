@@ -83,7 +83,7 @@ async function admit(s){
   const row=await authRole(email);
   if(row&&row.error){
     const m=$('gate-msg'); m.className='msg err';
-    m.textContent='Could not read the access list ('+row.error+'). Run sql/auth_allowlist.sql.';
+    m.textContent='Could not read the access list ('+row.error+'). Run sql/'+(/recursion/i.test(row.error)?'auth_allowlist_fix.sql':'auth_allowlist.sql')+'.';
     await sb.auth.signOut(); return;
   }
   if(!row){

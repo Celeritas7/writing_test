@@ -12,10 +12,21 @@ const JP_DIRS=[['auto','Auto'],['k2r','漢字 → reading'],['r2k','かな → k
    its two review rows: the direction that is due (or more overdue) wins; a
    word never tested in 'write' gets 'read' first; a word never tested at all
    is 'read'. `force` may name a direction for a word (Sequence mode). */
+/* かな → 漢字 needs something to write. エプロン and テスト answer to themselves,
+   so their write direction is prompted by the MEANING instead: "apron →" and you
+   write エプロン. A kana-only word with no meaning on file stays read-only. */
+const JP_HAS_KANJI=/[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
+const JP_MEAN={};                                  // kanji → meaning_en, filled as rows arrive
+const jpHasKanji=k=>JP_HAS_KANJI.test(String(k||''));
+function jpNoteMeanings(rows){ for(const r of rows||[]) if(r&&r.kanji) JP_MEAN[r.kanji]=String(r.meaning_en||'').trim(); return rows; }
+// unknown meaning counts as writable; jpItems downgrades it once the row is in hand
+function jpWritable(k){ return jpHasKanji(k) || !(k in JP_MEAN) || !!JP_MEAN[k]; }
+function jpNoKataWrite(out){ for(const k in out) if(out[k]==='write'&&!jpWritable(k)) out[k]='read'; return out; }
+window.jpWritable=jpWritable;
 async function jpDirections(kanjis, force){
   const out={}; for(const k of kanjis) out[k]=force&&force[k]||'read';
   if(JPS.dir==='k2r'){ return out; }
-  if(JPS.dir==='r2k'){ for(const k of kanjis) out[k]='write'; return out; }
+  if(JPS.dir==='r2k'){ for(const k of kanjis) out[k]='write'; return jpNoKataWrite(out); }
   try{
     const inList='('+kanjis.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
     const {rows}=await jpGet(`japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=kanji,direction,next_review,last_rating&limit=5000`);
@@ -31,11 +42,18 @@ async function jpDirections(kanjis, force){
       else out[k]=(wr.next_review||'')<=(rd.next_review||'')?'write':'read';
     }
   }catch(e){}
-  return out;
+  return jpNoKataWrite(out);
 }
 function jpItems(rows, dirs){
-  return rows.map((r,i)=>{ const rev=dirs[r.kanji]==='write';
-    return {id:'jp-'+(r.id||i), topic_id:'jp', number:i+1, unit_no:i+1, prompt:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana, kanji:r.kanji, rev, subtitle:r.meaning_en||'', src:'jp'}; });
+  jpNoteMeanings(rows);
+  return rows.map((r,i)=>{
+    const mean=String(r.meaning_en||'').trim();
+    // kana-only word going the write way is prompted by its meaning, not its reading
+    const mn=dirs[r.kanji]==='write'&&!jpHasKanji(r.kanji)&&!!mean;
+    const rev=dirs[r.kanji]==='write'&&(jpHasKanji(r.kanji)||mn);
+    return {id:'jp-'+(r.id||i), topic_id:'jp', number:i+1, unit_no:i+1,
+      prompt:mn?mean:rev?r.hiragana:r.kanji, answer:rev?r.kanji:r.hiragana,
+      kanji:r.kanji, rev, mean:mn, subtitle:mn?'':mean, src:'jp'}; });
 }
 const JP_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /* progress.user_id is a uuid in that project — only filter when we actually have one */
@@ -88,7 +106,7 @@ window.jpStartSequence=async()=>{
   try{
     const {rows:due}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji,direction,next_review&order=next_review.asc&limit=${JPS.n*2}`);
     const force={}; const seenK=[];
-    for(const d of due){ if(!force[d.kanji]){ force[d.kanji]=d.direction||'read'; seenK.push(d.kanji); } }  // earliest due direction wins; a kanji once
+    for(const d of due){ if(!force[d.kanji]){ const dd=d.direction||'read'; if(dd==='write'&&!jpWritable(d.kanji)) continue; force[d.kanji]=dd; seenK.push(d.kanji); } }  // earliest due direction wins; a kanji once
     const dueK=seenK.slice(0,JPS.n);
     let words=[];
     if(dueK.length){
@@ -261,7 +279,7 @@ function jpRank(p){ const m=String(p.marking==null?'':p.marking).toLowerCase();
   if(/4|easy/.test(m)) return 3;
   if(/5|known|perfect/.test(m)) return 4;
   return (p.times_wrong||0)>(p.times_correct||0)?0:2; }
-function jpUniq(rows){ const s=new Set(); return rows.filter(r=>!s.has(r.kanji)&&s.add(r.kanji)); }
+function jpUniq(rows){ jpNoteMeanings(rows); const s=new Set(); return rows.filter(r=>!s.has(r.kanji)&&s.add(r.kanji)); }
 async function jpSetItems(rows, label, seq, force){
   GH.seq=!!seq;
   const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
@@ -272,11 +290,12 @@ async function jpSetItems(rows, label, seq, force){
 /* 読 N · 書 M of total — two bars, complete only when both reach total */
 function jpDayChip(label, total, done){
   const d=(done&&typeof done==='object')?done:{r:done||0,w:0};
-  const r=Math.min(d.r||0,total), w=Math.min(d.w||0,total), full=total&&r>=total&&w>=total;
-  const pr=total?Math.round(100*r/total):0, pw=total?Math.round(100*w/total):0;
+  const wt=(d.wt==null?total:d.wt);   // katakana / kana-only words have nothing to write
+  const r=Math.min(d.r||0,total), w=Math.min(d.w||0,wt), full=total&&r>=total&&w>=wt;
+  const pr=total?Math.round(100*r/total):0, pw=wt?Math.round(100*w/wt):100;
   return `<button class="card" onclick="jpStartDay('${esc(JPS.level)}','${esc(label)}')" style="text-align:left;padding:12px 14px;border:1px solid ${full?'#2e8b46':'var(--line)'};cursor:pointer;background:#fff">
     <div style="font-weight:600;font-size:14px">${esc(label)}</div>
-    <div style="font-size:12px;margin-top:2px"><span style="color:#2e8b46;font-weight:600">読 ${r}</span> <span style="color:var(--mute)">·</span> <span style="color:#a8281f;font-weight:600">書 ${w}</span> <span style="color:var(--mute)">of ${total}</span></div>
+    <div style="font-size:12px;margin-top:2px"><span style="color:#2e8b46;font-weight:600">読 ${r}</span><span style="color:var(--mute)">/${total}</span> <span style="color:var(--mute)">·</span> <span style="color:#a8281f;font-weight:600">書 ${w}</span><span style="color:var(--mute)">/${wt}</span>${wt<total?`<span style="color:var(--mute)" title="${total-wt} kana-only word${total-wt>1?'s':''} — nothing to write"> ·  かな${total-wt}</span>`:''}</div>
     <div class="meter" style="margin-top:8px;height:3px"><i style="width:${pr}%;background:#2e8b46"></i></div>
     <div class="meter" style="margin-top:3px;height:3px"><i style="width:${pw}%;background:#a8281f"></i></div></button>`;
 }
@@ -309,7 +328,8 @@ async function jpCoverage(lv){
     for(const r of log){ ((r.direction||'read')==='write'?seenW:seen).add(r.kanji); }
     for(const k of Object.keys(words)){
       const ws=words[k];
-      JPS.done[k]={r:ws.filter(w=>seen.has(w)).length, w:ws.filter(w=>seenW.has(w)).length};
+      const wr=ws.filter(jpWritable);
+      JPS.done[k]={r:ws.filter(w=>seen.has(w)).length, w:wr.filter(w=>seenW.has(w)).length, wt:wr.length};
     }
     JPS.seen=seen; JPS.seenW=seenW;
   }catch(e){ JPS.done=null; }
@@ -325,7 +345,7 @@ window.jpStartDay=async(lv,label)=>{
     const gap=[], force={};
     if(JPS.seen) for(const r of rows){ if(!r.kanji) continue;
       if(!JPS.seen.has(r.kanji)){ gap.push(r); force[r.kanji]='read'; }
-      else if(JPS.seenW&&!JPS.seenW.has(r.kanji)){ gap.push(r); force[r.kanji]='write'; } }
+      else if(JPS.seenW&&!JPS.seenW.has(r.kanji)&&jpWritable(r.kanji)){ gap.push(r); force[r.kanji]='write'; } }
     if(gap.length&&gap.length<rows.length*2){
       const take=gap.slice(0,JPS.n);
       await jpSetItems(take, lv+' · '+label+' · '+gap.length+' left', false, force);

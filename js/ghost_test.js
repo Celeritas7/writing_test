@@ -1,5 +1,5 @@
 /* Ghost test — on-screen handwritten sheet with answer overlay. Depends on globals from learning_hub.js */
-let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[], brush:0, time:{}, focus:null, act:0, limit:{}, finger:(()=>{try{return localStorage.getItem('gh-finger')==='1'}catch(e){return false}})(), drawer:(()=>{try{return localStorage.getItem('gh-drawer')==='1'}catch(e){return false}})(), more:false};
+let GH={topic:null, marks:{}, strokes:[], tool:'pen', wi:1, ghost:false, items:[], brush:0, time:{}, focus:null, act:0, limit:{}, boxes:(()=>{try{return localStorage.getItem('gh-boxes')!=='0'}catch(e){return true}})(), paper:(()=>{try{return localStorage.getItem('gh-paper')||'warm'}catch(e){return 'warm'}})(), finger:(()=>{try{return localStorage.getItem('gh-finger')==='1'}catch(e){return false}})(), drawer:(()=>{try{return localStorage.getItem('gh-drawer')==='1'}catch(e){return false}})(), more:false};
 const GH_W=[1.6,2.6,4.2];
 
 const GH_LANG=/lang|japan|kanji|kana|vocab|word/i;
@@ -22,12 +22,14 @@ function renderGhost(){
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
-    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
+    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w${p.mean?' en':''}">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
   }).join('');
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
-  const inst = nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
+  const nMean=GH.items.filter(p=>p.mean).length;
+  const meanNote=nMean?`　·　${nMean} in English = meaning→カタカナ`:'';
+  const inst = (nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
     : nRev ? 'ひらがな→漢字 (write) · ghost overlay shows the key in red'
-    : 'Write your answer under each item · ghost overlay shows the key in red';
+    : 'Write your answer under each item · ghost overlay shows the key in red')+meanNote;
   $('main').innerHTML=`<div class="gh-top"><div class="gh-title"><div class="kicker">Ghost test</div><h1>Write on screen</h1></div><div class="pillbar">${pills}</div></div>
     ${ghPanelHtml()}
     <div class="gh-bar">
@@ -36,6 +38,8 @@ function renderGhost(){
       <button class="btn sm ghost gh-t" id="gh-width" onclick="ghWidth()">Width: M</button>
       <button class="btn sm ghost gh-t ${GH.finger?'on':''}" id="gh-finger" onclick="ghFinger()" title="Write with your finger (page won't scroll while on)">☝ Finger</button>
       <span class="gh-bar-sp"></span>
+      <button class="btn sm ghost gh-t gh-boxes-b ${GH.boxes?'on':''}" onclick="ghBoxes()" title="Ruled boxes instead of plain lines (B)">▦ Boxes</button>
+      <button class="btn sm ghost gh-t gh-paper-b ${GH.paper==='plain'?'on':''}" onclick="ghPaper()" title="Paper — blank white or warm graph paper">${GH.paper==='plain'?'□ Plain':'▤ Grid'}</button>
       <button class="btn sm gh-t gh-ghost gh-ghost-top ${GH.ghost?'on':''}" onclick="ghToggle()">Ghost</button>
       <button class="btn sm ghost gh-t gh-full-btn gh-full-top" onclick="ghFull()" title="Full screen (F)">⤢</button>
     </div>
@@ -364,6 +368,8 @@ function ghInit(){
   ghApplyFinger();
   ghInitUndoTap();
   document.body.classList.toggle('gh-drawer-on', !!GH.drawer);
+  document.body.classList.toggle('gh-boxes', !!GH.boxes);
+  document.body.classList.toggle('gh-paper-plain', GH.paper==='plain');
   document.body.classList.toggle('gh-more-on', !!GH.more);
   addEventListener('resize',ghResize);
   ghInitBrush();
@@ -378,6 +384,22 @@ window.ghDrawer=on=>{
   GH.drawer=!!on;
   try{ localStorage.setItem('gh-drawer', GH.drawer?'1':'0'); }catch(e){}
   document.body.classList.toggle('gh-drawer-on', GH.drawer);
+};
+window.ghBoxes=()=>{
+  GH.boxes=!GH.boxes;
+  try{ localStorage.setItem('gh-boxes', GH.boxes?'1':'0'); }catch(e){}
+  document.body.classList.toggle('gh-boxes', GH.boxes);
+  const b=document.querySelector('.gh-boxes-b'); if(b) b.classList.toggle('on', GH.boxes);
+  ghResizeSoon();   // box geometry changed, so the ink canvas has to re-fit
+};
+/* paper theme for the boxes: warm (default) or plain white. Purely cosmetic —
+   the geometry is identical, so no canvas re-fit is needed. */
+window.ghPaper=()=>{
+  GH.paper = GH.paper==='plain' ? 'warm' : 'plain';
+  try{ localStorage.setItem('gh-paper', GH.paper); }catch(e){}
+  document.body.classList.toggle('gh-paper-plain', GH.paper==='plain');
+  const b=document.querySelector('.gh-paper-b');
+  if(b){ b.classList.toggle('on', GH.paper==='plain'); b.textContent = GH.paper==='plain' ? '□ Plain' : '▤ Grid'; }
 };
 window.ghMore=()=>{
   GH.more=!GH.more;
@@ -463,6 +485,7 @@ addEventListener('orientationchange',()=>ghResizeSoon());
 addEventListener('keydown',e=>{
   if(e.target&&/input|select|textarea/i.test(e.target.tagName)) return;
   if(e.key==='f'||e.key==='F') ghFull();
+  if(e.key==='b'||e.key==='B') ghBoxes();
   if(e.key==='Escape'&&document.body.classList.contains('gh-full')) ghFull(false);
 });
 function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1; ghCv.width=r.width*d; ghCv.height=r.height*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
