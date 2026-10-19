@@ -26,7 +26,7 @@ function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList
 
 /* ---------- sidebar collapse ----------------------------------------
    data-icon feeds the collapsed rail's ::before glyph. */
-const NAV_ICONS={library:'▤', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
+const NAV_ICONS={home:'⌂', library:'▤', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
 (function initNav(){
   for(const el of document.querySelectorAll('.nav-item')) el.dataset.icon=NAV_ICONS[el.dataset.nav]||'•';
   const b=document.getElementById('nav-toggle'); if(!b) return;
@@ -203,13 +203,15 @@ function queue(topicId, subjectId, tiers, kinds, n){
 window.addEventListener('hashchange', route);
 function route(){
   if(!LOADED) return;
-  const h=(location.hash||'#library').slice(1);
+  // phones land on the dashboard; a wide screen opens straight into the Library
+  const h=(location.hash||(matchMedia('(max-width:760px)').matches?'#home':'#library')).slice(1);
   const [page,arg]=h.split('/');
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-setup').textContent=DIR?'✓':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
-  if(page==='topic') renderTopic(arg);
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
+  if(page==='home') renderHome();
+  else if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
   else if(page==='ghost') renderGhost();
@@ -368,6 +370,60 @@ function renderBuild(){
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
+
+/* ---------- home (phone-first dashboard) ----------
+   Four tiles, in reading order: what is due and a Start, the streak, this
+   week's accuracy, and the last sheet's marks. Numbers wear text colour; a
+   coloured chip only marks state. */
+let HOME_JP=false;
+function renderHome(){
+  const latest=latestByProblem();
+  let weak=0, due=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak') weak++; else if(c==='due') due++; }
+  const jp=(typeof JPS!=='undefined')?JPS:{};
+  const jpReadyNow=!DEMO&&typeof jpReady==='function'&&jpReady();
+  if(jpReadyNow&&!HOME_JP&&typeof jpDueCount==='function'){ HOME_JP=true; jpDueCount().then(()=>{ if(location.hash==='#home'||(!location.hash&&matchMedia('(max-width:760px)').matches)) renderHome(); }); }
+  const jpDue=jp.dueCount==null?null:jp.dueCount;
+  // accuracy over the last 7 days: Cowork + ghost attempts, plus Japanese sheets from the local log
+  const week=Date.now()-7*DAY; let ok=0, n=0;
+  for(const a of ATTEMPTS){ if(new Date(a.graded_at).getTime()>=week){ n++; if(a.correct) ok++; } }
+  if(typeof ghSessions==='function') for(const s of ghSessions()) if(s.src==='jp'&&s.ts>=week){ n+=s.n; ok+=s.right; }
+  const acc=n?Math.round(ok/n*100):null;
+  // last sheet: the newest ghost session on this device, else the newest graded ghost group, else the newest Cowork batch
+  let last=null;
+  const sess=typeof ghSessions==='function'?ghSessions()[0]:null;
+  const ghostA=ATTEMPTS.filter(a=>a.graded_by==='ghost');
+  if(sess&&(!ghostA.length||sess.ts>=new Date(ghostA[0].graded_at).getTime())) last={label:sess.label, when:sess.ts, items:sess.items.map(x=>({name:x.kanji||x.prompt, m:x.m})), action:sess.src==='jp'&&sess.right<sess.n?`<button class="btn sm ghost" onclick="ghRetrySession(0)">Retry the wrong ones</button>`:''};
+  else if(ghostA.length){ const k=ghostA[0].topic_id+'|'+String(ghostA[0].graded_at).slice(0,16); const items=ghostA.filter(a=>a.topic_id+'|'+String(a.graded_at).slice(0,16)===k);
+    last={label:(TOPICS.find(t=>t.id===ghostA[0].topic_id)||{}).name||'Ghost sheet', when:ghostA[0].graded_at, items:items.map(a=>({name:(PROBLEMS.find(p=>p.id===a.problem_id)||{subtitle:a.problem_id}).subtitle, m:a.correct?1:rating5(a.rating)>=3?2:3})), action:`<button class="btn sm ghost" onclick="ghPick('${esc(ghostA[0].topic_id)}');location.hash='ghost'">Open the sheet</button>`}; }
+  else if(ATTEMPTS.length){ const a0=ATTEMPTS[0], day=String(a0.graded_at).slice(0,10), items=ATTEMPTS.filter(a=>String(a.graded_at).slice(0,10)===day);
+    last={label:'Cowork feedback', when:a0.graded_at, items:items.map(a=>({name:(PROBLEMS.find(p=>p.id===a.problem_id)||{subtitle:a.problem_id}).subtitle, m:a.correct?1:3})), action:`<a class="btn sm ghost" href="#review">Open Review</a>`}; }
+  const G=['','✓','△','✗'], C=['','ok','mid','bad'];
+  const marks=last?last.items.slice(0,24).map(x=>`<li><span class="gh-mk ${C[x.m]||''}" aria-hidden="true">${G[x.m]||'·'}</span><span>${esc(x.name)}</span></li>`).join(''):'';
+  const startJp=jpReadyNow&&jpDue?`<button class="btn sm" onclick="location.hash='ghost';setTimeout(()=>jpStartSequence(),50)">Start today's ${Math.min(jpDue,20)}</button>`:'';
+  $('main').innerHTML=`<div class="kicker">Home</div><h1 style="margin:4px 0 14px">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'})}</h1>
+    <div class="tiles">
+      <div class="tile">
+        <div class="kicker">Due today</div>
+        <div class="big">${weak+due+(jpDue||0)}</div>
+        <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
+        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Ghost test</a>`}</div>
+      </div>
+      <div class="tile">
+        <div class="kicker">Streak</div>
+        <div class="big">${jp.streak||0}<small> day${jp.streak===1?'':'s'}</small></div>
+        <div class="sub">${jpReadyNow?(jp.streak?'Writing sheets on consecutive days.':'Write a sheet today to start one.'):'Counted from your Japanese sheets once the database is connected.'}</div>
+      </div>
+      <div class="tile">
+        <div class="kicker">Accuracy · 7 days</div>
+        <div class="big">${acc==null?'—':acc+'<small>%</small>'}</div>
+        <div class="sub">${n?`${ok} right of ${n} answers`:'No graded work this week yet.'}</div>
+      </div>
+      <div class="tile wide">
+        <div class="kicker">Last sheet</div>
+        ${last?`<div class="sub" style="margin-bottom:6px"><b>${esc(last.label)}</b> · ${fmtDate(last.when)} · ${last.items.filter(x=>x.m===1).length} / ${last.items.length}</div><ul class="marks">${marks}</ul><div class="acts">${last.action}</div>`:'<div class="sub">Your most recent marks will show here.</div>'}
+      </div>
+    </div>`;
+}
 
 /* ---------- review ----------
    Cowork feedback stays one card per problem. Ghost sheets collapse to one card
@@ -538,7 +594,7 @@ async function exportBatchNow(q, m){
   if(!DEMO){
     const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
     if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
-  }
+  } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   m.className='msg ok'; m.textContent=`${fname} → ${dest}. Solve it on the iPad, save into solved/ — Cowork does the rest.`;
 }
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
