@@ -11,6 +11,11 @@ const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
 let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+/* an id that is never empty (Japanese or symbol-only names) and never collides with an existing row */
+function uniqueId(name, taken){ let base=slug(name)||('x'+Date.now().toString(36)); let id=base, n=2; while(taken.has(id)) id=base+'_'+(n++); return id; }
+/* topics whose subject no longer exists are shown under one 'Unsorted' heading rather than vanishing */
+const ORPHAN='__unsorted';
+function subjectOf(t){ return SUBJECTS.some(s=>s.id===t.subject_id)?t.subject_id:(t.subject_id?ORPHAN:(SUBJECTS[0]||{}).id); }
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
 let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
 let OPEN_SUBS=null;
@@ -193,7 +198,7 @@ function topicStats(tid){
 }
 function queue(topicId, subjectId, tiers, kinds, n){
   const latest=latestByProblem();
-  const subOf=tid=>{ const t=TOPICS.find(x=>x.id===tid); return t?(t.subject_id||(SUBJECTS[0]||{}).id):null; };
+  const subOf=tid=>{ const t=TOPICS.find(x=>x.id===tid); return t?subjectOf(t):null; };
   let pool=PROBLEMS.filter(p=>(topicId!=='smart' ? p.topic_id===topicId : (subjectId==='all'||subOf(p.topic_id)===subjectId)) && tiers.has(p.tier||'core') && kinds.has(p.kind||'drill'));
   const out=new Set(); for(const b of BATCHES) if(b.status!=='graded') for(const id of (b.problem_ids||[])) out.add(id);
   const scored=pool.map(p=>{
@@ -247,8 +252,9 @@ function topicCard(t){
 }
 function renderLibrary(){
   if(!OPEN_SUBS) OPEN_SUBS=new Set(SUBJECTS.length?[SUBJECTS[0].id]:[]);
-  const sections=SUBJECTS.map(s=>{
-    const topics=TOPICS.filter(t=>(t.subject_id||SUBJECTS[0].id)===s.id).sort((a,b)=>(a.branch_no||0)-(b.branch_no||0));
+  const orphans=TOPICS.filter(t=>subjectOf(t)===ORPHAN);
+  const sections=SUBJECTS.concat(orphans.length?[{id:ORPHAN,name:'Unsorted',orphan:true}]:[]).map(s=>{
+    const topics=TOPICS.filter(t=>subjectOf(t)===s.id).sort((a,b)=>(a.branch_no||0)-(b.branch_no||0));
     const open=OPEN_SUBS.has(s.id);
     let weak=0,due=0,total=0,attempted=0;
     for(const t of topics){ const st=topicStats(t.id); weak+=st.weak; due+=st.due; total+=st.total; attempted+=st.attempted; }
@@ -257,7 +263,8 @@ function renderLibrary(){
       <div class="subj-head ${open?'open':''}" role="button" tabindex="0" aria-expanded="${open}" onclick="toggleSub('${esc(s.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSub('${esc(s.id)}')}">
         <h2>${esc(s.name)}</h2>
         <span class="kicker">${topics.length} topic${topics.length===1?'':'s'} · ${attempted}/${total} attempted</span>${flags}
-        <button class="btn ghost sm" style="margin-left:auto" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')">＋ Topic</button>
+        ${s.orphan?`<span class="kicker" style="margin-left:auto;color:var(--amber)">subject missing — open a topic to move it</span>`:`<span class="rowtools" style="margin-left:auto" onclick="event.stopPropagation()"><button title="Rename subject" aria-label="Rename ${esc(s.name)}" onclick="renameSubject('${esc(s.id)}')">✎</button><button title="Delete subject" aria-label="Delete ${esc(s.name)}" class="danger" onclick="deleteSubject('${esc(s.id)}')" ${topics.length?'disabled':''}>🗑</button></span>
+        <button class="btn ghost sm" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')">＋ Topic</button>`}
         <span class="chev">▸</span>
       </div>
       <div class="${open?'':'hide'}" style="padding:12px 2px 6px">
@@ -292,17 +299,17 @@ async function busy(f, fn){ if(f._busy) return false; const b=f.querySelector('b
 window.addSubject=e=>{ e.preventDefault(); busy(e.target, ()=>addSubjectNow(e.target)); return false; };
 async function addSubjectNow(f){
   const name=f.name.value.trim(); if(!name) return false;
-  const row={id:slug(name), sort_no:SUBJECTS.length+1, name, tagline:f.tagline.value.trim()||null};
-  if(SUBJECTS.some(s=>s.id===row.id)){ toast('That subject already exists.'); return false; }
+  if(SUBJECTS.some(s=>s.name.toLowerCase()===name.toLowerCase())){ toast('That subject already exists.'); return false; }
+  const row={id:uniqueId(name, new Set(SUBJECTS.map(s=>s.id))), sort_no:Math.max(0,...SUBJECTS.map(s=>s.sort_no||0))+1, name, tagline:f.tagline.value.trim()||null};
   if(!DEMO){ const {error}=await sb.from('written_test_subjects').insert(row); if(error){ toast('Save failed: '+error.message,6000); return false; } }
   SUBJECTS.push(row); toast(name+' added.'); route(); return false;
 };
 window.addTopic=(e,sid)=>{ e.preventDefault(); busy(e.target, ()=>addTopicNow(e.target,sid)); return false; };
 async function addTopicNow(f,sid){
   const name=f.name.value.trim(); if(!name) return false;
-  const sibs=TOPICS.filter(t=>(t.subject_id||SUBJECTS[0].id)===sid);
-  const row={id:slug(name), subject_id:sid, branch_no:Math.max(0,...TOPICS.map(t=>t.branch_no||0))+1, name, tagline:f.tagline.value.trim()||null, accent:ACCENTS[sibs.length%ACCENTS.length]};
-  if(TOPICS.some(t=>t.id===row.id)){ toast('A topic with that name already exists.'); return false; }
+  const sibs=TOPICS.filter(t=>subjectOf(t)===sid);
+  if(sibs.some(t=>t.name.toLowerCase()===name.toLowerCase())){ toast('This subject already has a topic with that name.'); return false; }
+  const row={id:uniqueId(name, new Set(TOPICS.map(t=>t.id))), subject_id:sid, branch_no:Math.max(0,...TOPICS.map(t=>t.branch_no||0))+1, name, tagline:f.tagline.value.trim()||null, accent:ACCENTS[sibs.length%ACCENTS.length]};
   if(!DEMO){ const {error}=await sb.from('written_test_topics').insert(row); if(error){ toast('Save failed: '+error.message,6000); return false; } }
   TOPICS.push(row); toast(name+' added — now add problems to it.'); location.hash='topic/'+row.id; return false;
 };
@@ -314,7 +321,7 @@ async function addProblemNow(f,tid){
   const number=Math.max(0,...sibs.map(p=>p.number||0))+1;
   const row={id:tid+'-'+number, topic_id:tid, number, unit_no:number, subtitle, prompt, given_data:f.given.value.trim()||null, answer:f.answer.value.trim()||null, tier:f.tier.value, kind:f.kind.value};
   if(!DEMO){ const {error}=await sb.from('written_test_problems').insert(row); if(error){ toast('Save failed: '+error.message,6000); return false; } }
-  PROBLEMS.push(row); toast('Problem '+number+' added.'); route(); return false;
+  PROBLEMS.push(row); EDIT_P=null; toast('Problem '+number+' added.'); route(); return false;
 };
 
 function renderTopic(tid){
@@ -324,36 +331,97 @@ function renderTopic(tid){
   const rows=probs.map(p=>{
     const s=pstatus(p,latest);
     const fb=s.a&&s.a.notes?`<div class="note">↳ ${esc(s.a.notes)}</div>`:'';
-    return `<div class="prow"><span class="num">${String(p.unit_no||p.number).padStart(2,'0')}</span>
-      <div style="flex:1"><div class="ttl">${esc(p.subtitle)}</div><div style="font-size:12.5px;color:var(--mute)">${esc(p.prompt||'')}</div>${fb}</div>
-      <div class="why"><span class="chip ${esc(p.tier||'core')}">${TIER_LABEL[p.tier]||'core'}</span><span class="chip">${esc(p.kind||'drill')}</span><span class="chip ${s.code}">${esc(s.label)}</span></div>
-    </div>`;
+    const i=probs.indexOf(p);
+    return `<div class="prow" id="pr-${esc(p.id)}"><span class="num">${String(p.unit_no||p.number).padStart(2,'0')}</span>
+      <div style="flex:1;min-width:0"><div class="ttl">${esc(p.subtitle)}</div><div class="prompt1">${esc(p.prompt||'')}</div>${fb}</div>
+      <div class="why"><span class="chip ${esc(p.tier||'core')}">${TIER_LABEL[p.tier]||'core'}</span><span class="chip">${esc(p.kind||'drill')}</span><span class="chip ${s.code}">${esc(s.label)}</span>
+        <span class="rowtools"><button title="Move up" aria-label="Move up" onclick="moveProblem('${esc(p.id)}',-1)" ${i===0?'disabled':''}>▲</button><button title="Move down" aria-label="Move down" onclick="moveProblem('${esc(p.id)}',1)" ${i===probs.length-1?'disabled':''}>▼</button><button title="Edit" aria-label="Edit ${esc(p.subtitle)}" onclick="editProblem('${esc(p.id)}')">✎</button><button title="Delete" aria-label="Delete ${esc(p.subtitle)}" class="danger" onclick="deleteProblem('${esc(p.id)}')">🗑</button></span></div>
+    </div>${EDIT_P===p.id?problemForm(tid,p):''}`;
   }).join('');
   const st=topicStats(tid);
   $('main').innerHTML=`<a href="#library" style="font-size:13px">← Library</a>
     <h1 style="margin-top:8px">${esc(t.name)}</h1>
     <div class="stat-row" style="margin-top:8px"><span class="chip">${st.attempted}/${st.total} attempted</span>${st.weak?`<span class="chip weak">${st.weak} weak</span>`:''}${st.due?`<span class="chip due">${st.due} due</span>`:''}</div>
     <p style="color:var(--mute);margin:6px 0 14px">${esc(t.tagline||'')} The list below is the learning path in order — statuses update automatically as Cowork grades your work.</p>
-    <div style="margin-bottom:14px;display:flex;gap:10px"><button class="btn" onclick="practise('${esc(tid)}')">Build a batch from this topic</button><button class="btn ghost" onclick="toggleForm('pf-new')">＋ Add problem</button></div>
-    <form id="pf-new" class="card hide" style="margin-bottom:14px" onsubmit="return addProblem(event,'${esc(tid)}')">
+    <div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="practise('${esc(tid)}')">Build a batch from this topic</button><button class="btn ghost" onclick="toggleForm('pf-new')">＋ Add problem</button><button class="btn ghost" onclick="toggleForm('tf-edit')">✎ Edit topic</button></div>
+    <form id="tf-edit" class="card hide" style="margin-bottom:14px" onsubmit="return saveTopic(event,'${esc(tid)}')">
       <div class="formrow" style="margin-top:0">
-        <div style="flex:1;min-width:200px"><label>Title</label><input name="subtitle" required style="width:100%" placeholder="e.g. Chain rule"></div>
-        <div><label>Tier</label><select name="tier"><option value="warmup">warm-up</option><option value="core" selected>core</option><option value="challenge">challenge</option></select></div>
-        <div><label>Kind</label><select name="kind"><option value="drill" selected>drill</option><option value="concept">concept</option><option value="applied">applied</option></select></div>
-      </div>
-      <div class="formrow"><div style="flex:1"><label>Prompt (the question)</label><input name="prompt" required style="width:100%"></div></div>
-      <div class="formrow">
-        <div style="flex:1;min-width:200px"><label>Given / data (optional)</label><input name="given" style="width:100%"></div>
-        <div style="flex:1;min-width:200px"><label>Answer (for the grader, optional)</label><input name="answer" style="width:100%"></div>
-        <button class="btn sm" type="submit">Save problem</button>
+        <div><label>Topic name</label><input name="name" required value="${esc(t.name)}"></div>
+        <div style="flex:1;min-width:220px"><label>Tagline</label><input name="tagline" style="width:100%" value="${esc(t.tagline||'')}"></div>
+        <div><label>Subject</label><select name="subject_id">${SUBJECTS.map(s=>`<option value="${esc(s.id)}" ${subjectOf(t)===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+        <button class="btn sm" type="submit">Save topic</button>
+        <button class="btn sm ghost danger" type="button" onclick="deleteTopic('${esc(tid)}')" ${probs.length?'disabled title="Delete its problems first"':''}>Delete topic</button>
       </div>
     </form>
+    <div id="pf-new" class="${EDIT_P?'':'hide'}">${EDIT_P?'':problemForm(tid,null)}</div>
     <div class="plist">${rows}</div>`;
 }
+/* one form for add and edit; prompt / given / answer are multi-line */
+let EDIT_P=null;
+function problemForm(tid,p){
+  const sel=(n,v,opts)=>`<select name="${n}">${opts.map(([k,l])=>`<option value="${k}" ${(p?p[n]:v)===k?'selected':''}>${l}</option>`).join('')}</select>`;
+  return `<form class="card" style="margin:8px 0 14px" onsubmit="return ${p?`saveProblem(event,'${esc(p.id)}')`:`addProblem(event,'${esc(tid)}')`}">
+      <div class="formrow" style="margin-top:0">
+        <div style="flex:1;min-width:200px"><label>Title</label><input name="subtitle" required style="width:100%" placeholder="e.g. Chain rule" value="${esc(p?p.subtitle:'')}"></div>
+        <div><label>Tier</label>${sel('tier','core',[['warmup','warm-up'],['core','core'],['challenge','challenge']])}</div>
+        <div><label>Kind</label>${sel('kind','drill',[['drill','drill'],['concept','concept'],['applied','applied']])}</div>
+      </div>
+      <div class="formrow"><div style="flex:1"><label>Prompt (the question)</label><textarea name="prompt" required rows="3" placeholder="Line breaks are kept in the PDF">${esc(p?p.prompt:'')}</textarea></div></div>
+      <div class="formrow">
+        <div style="flex:1;min-width:200px"><label>Given / data (optional)</label><textarea name="given" rows="2">${esc(p?p.given_data||'':'')}</textarea></div>
+        <div style="flex:1;min-width:200px"><label>Answer (for the grader, optional)</label><textarea name="answer" rows="2">${esc(p?p.answer||'':'')}</textarea></div>
+      </div>
+      <div class="formrow"><button class="btn sm" type="submit">${p?'Save changes':'Save problem'}</button>${p?`<button class="btn sm ghost" type="button" onclick="EDIT_P=null;route()">Cancel</button>`:''}</div>
+    </form>`;
+}
+/* ---------- edit / delete / reorder ---------- */
+async function dbUpdate(table,id,patch){ if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
+async function dbDelete(table,id){ if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
+window.editProblem=id=>{ EDIT_P=id; route(); setTimeout(()=>{ const el=$('pr-'+id); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },50); };
+window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
+  const f=e.target, p=PROBLEMS.find(x=>x.id===id); if(!p) return false;
+  const patch={subtitle:f.subtitle.value.trim(), prompt:f.prompt.value.trim(), given_data:f.given.value.trim()||null, answer:f.answer.value.trim()||null, tier:f.tier.value, kind:f.kind.value};
+  if(!patch.subtitle||!patch.prompt) return false;
+  if(await dbUpdate('written_test_problems',id,patch)){ Object.assign(p,patch); EDIT_P=null; toast('Problem updated.'); route(); }
+  return false; }); return false; };
+window.deleteProblem=async id=>{
+  const p=PROBLEMS.find(x=>x.id===id); if(!p) return;
+  const n=ATTEMPTS.filter(a=>a.problem_id===id).length;
+  if(!confirm(`Delete “${p.subtitle}”?${n?`\n\nIts ${n} graded attempt${n===1?'':'s'} stay in Review but will show the id instead of the title.`:''}\n\nThis cannot be undone.`)) return;
+  if(await dbDelete('written_test_problems',id)){ PROBLEMS=PROBLEMS.filter(x=>x.id!==id); toast('Problem deleted.'); route(); }
+};
+window.moveProblem=async(id,dir)=>{
+  const p=PROBLEMS.find(x=>x.id===id); if(!p) return;
+  const sibs=PROBLEMS.filter(x=>x.topic_id===p.topic_id).sort((a,b)=>(a.unit_no||a.number)-(b.unit_no||b.number));
+  const i=sibs.indexOf(p), q=sibs[i+dir]; if(!q) return;
+  const a=p.unit_no||p.number, b=q.unit_no||q.number;
+  if(await dbUpdate('written_test_problems',p.id,{unit_no:b})&&await dbUpdate('written_test_problems',q.id,{unit_no:a})){ p.unit_no=b; q.unit_no=a; route(); }
+};
+window.saveTopic=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
+  const f=e.target, t=TOPICS.find(x=>x.id===id); if(!t) return false;
+  const patch={name:f.name.value.trim(), tagline:f.tagline.value.trim()||null, subject_id:f.subject_id.value};
+  if(!patch.name) return false;
+  if(await dbUpdate('written_test_topics',id,patch)){ Object.assign(t,patch); toast('Topic updated.'); route(); }
+  return false; }); return false; };
+window.deleteTopic=async id=>{
+  const t=TOPICS.find(x=>x.id===id); if(!t||PROBLEMS.some(p=>p.topic_id===id)) return;
+  if(!confirm(`Delete the topic “${t.name}”? This cannot be undone.`)) return;
+  if(await dbDelete('written_test_topics',id)){ TOPICS=TOPICS.filter(x=>x.id!==id); toast('Topic deleted.'); location.hash='library'; }
+};
+window.renameSubject=async id=>{
+  const s=SUBJECTS.find(x=>x.id===id); if(!s) return;
+  const name=prompt('Subject name', s.name); if(name==null) return; const nm=name.trim(); if(!nm||nm===s.name) return;
+  if(await dbUpdate('written_test_subjects',id,{name:nm})){ s.name=nm; toast('Subject renamed.'); route(); }
+};
+window.deleteSubject=async id=>{
+  const s=SUBJECTS.find(x=>x.id===id); if(!s||TOPICS.some(t=>subjectOf(t)===id)) return;
+  if(!confirm(`Delete the subject “${s.name}”?`)) return;
+  if(await dbDelete('written_test_subjects',id)){ SUBJECTS=SUBJECTS.filter(x=>x.id!==id); OPEN_SUBS=null; toast('Subject deleted.'); route(); }
+};
 
 function renderBuild(){
   const sPills=[['all','All subjects'],...SUBJECTS.map(s=>[s.id,s.name])].map(([id,name])=>`<button class="pill-t ${buildSel.subject===id?'on':''}" onclick="buildSel.subject='${esc(id)}';buildSel.topic='smart';renderBuild()">${esc(name)}</button>`).join('');
-  const subTopics=TOPICS.filter(t=>buildSel.subject==='all'||(t.subject_id||(SUBJECTS[0]||{}).id)===buildSel.subject).sort((a,b)=>(a.branch_no||0)-(b.branch_no||0));
+  const subTopics=TOPICS.filter(t=>buildSel.subject==='all'||subjectOf(t)===buildSel.subject).sort((a,b)=>(a.branch_no||0)-(b.branch_no||0));
   const tPills=[['smart','Smart mix'],...subTopics.map(t=>[t.id,t.name])].map(([id,name])=>`<button class="pill-t ${buildSel.topic===id?'on':''}" onclick="buildSel.topic='${esc(id)}';renderBuild()">${esc(name)}</button>`).join('');
   const tierPills=['warmup','core','challenge'].map(x=>`<button class="pill-t ${buildSel.tiers.has(x)?'on':''}" onclick="tog('tiers','${x}')">${buildSel.tiers.has(x)?'✓ ':''}${TIER_LABEL[x]}</button>`).join('');
   const kindPills=['drill','concept','applied'].map(x=>`<button class="pill-t ${buildSel.kinds.has(x)?'on':''}" onclick="tog('kinds','${x}')">${buildSel.kinds.has(x)?'✓ ':''}${x}</button>`).join('');
@@ -443,7 +511,7 @@ function renderHome(){
 let REV={topic:'all', wrong:false, batch:'all', limit:30, open:null};
 window.REV=REV;
 const fmtDate=d=>{ const x=new Date(d); return isNaN(x)?'—':x.toLocaleDateString(); };
-function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?(t.subject_id||(SUBJECTS[0]||{}).id):null; }
+function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?subjectOf(t):null; }
 /* Build view pre-filtered to one topic: weak problems rank first, so a wrong answer lands at the top */
 window.practise=tid=>{ buildSel.topic=tid; buildSel.subject=topicSubject(tid)||'all'; location.hash='build'; if(location.hash==='#build') renderBuild(); };
 window.setBatchStatus=async(id,status)=>{
