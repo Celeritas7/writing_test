@@ -453,12 +453,13 @@ async function exportBatch(){
 }
 async function exportBatchNow(q, m){
   const now=new Date();
-  const stamp=now.toISOString().slice(0,16).replace(/[-T:]/g,'').replace(/^(\d{8})(\d{4})$/,'$1_$2');
+  const two=n=>String(n).padStart(2,'0');
+  const stamp=`${now.getFullYear()}${two(now.getMonth()+1)}${two(now.getDate())}_${two(now.getHours())}${two(now.getMinutes())}`; // local time, matches the Review table
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');
   const fname=`WT_${topicSlug}_${stamp}.pdf`;
   const batchId=(crypto.randomUUID&&crypto.randomUUID())||String(now.getTime());
   if(!DIR&&DIR_PENDING) await reconnectDir(); // still inside the click's user activation
-  const blob=makePdf(q, fname, batchId);
+  const blob=await makePdf(q, fname, batchId);
   const jname=fname.replace(/\.pdf$/,'.json');
   const prob=x=>({id:x.p.id, topic_id:x.p.topic_id, number:x.p.number, subtitle:x.p.subtitle, prompt:x.p.prompt, given_data:x.p.given_data||null, tier:x.p.tier, kind:x.p.kind, picked_because:x.why});
   const head={batch_id:batchId, user_id:DEMO?'demo':SESSION.user.id, created_at:now.toISOString(), filename:fname};
@@ -486,48 +487,82 @@ async function exportBatchNow(q, m){
 }
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 
-function makePdf(q, fname, batchId){
+/* Embedded font for anything outside Latin-1 (kanji, kana, →, −, ⁴ …): jsPDF's
+   built-in fonts are WinAnsi only. Fetched once per session, ~1 MB. */
+let PDF_FONT=null;
+async function pdfFont(){
+  if(PDF_FONT) return PDF_FONT;
+  const r=await fetch('fonts/NotoSansJP-Regular.ttf'); if(!r.ok) throw new Error('font '+r.status);
+  const u=new Uint8Array(await r.arrayBuffer()); let b='';
+  for(let i=0;i<u.length;i+=0x8000) b+=String.fromCharCode.apply(null, u.subarray(i,i+0x8000));
+  return PDF_FONT=btoa(b);
+}
+async function makePdf(q, fname, batchId){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'letter'}); // 612 x 792
-  const M=54, W=612-2*M;
+  const M=54, W=612-2*M, LH=15, TOP=112, BOTTOM=740, GRID_MIN=160, GRID_END=668;
+  const text=q.map(x=>[x.p.subtitle,x.p.prompt,x.p.given_data,(TOPICS.find(z=>z.id===x.p.topic_id)||{}).name].join(' ')).join(' ');
+  let F='helvetica', FM='courier';
+  if(/[^\u0000-ÿ]/.test(text)){
+    try{ doc.addFileToVFS('NotoSansJP.ttf', await pdfFont()); doc.addFont('NotoSansJP.ttf','NotoSansJP','normal'); doc.addFont('NotoSansJP.ttf','NotoSansJP','bold'); F=FM='NotoSansJP'; }
+    catch(e){ toast('Japanese font could not be loaded — non-Latin text may not print.', 6000); }
+  }
+  const footer=(i,p,cont)=>{
+    doc.setFontSize(7.5); doc.setTextColor(150); doc.setFont('courier','normal');
+    doc.text(`batch:${batchId}  problem:${p.id}`, M, 764);
+    doc.text(`${i+1} / ${q.length}${cont?' (cont.)':''}`, 612-M, 764, {align:'right'});
+  };
+  const header=(i,p,t,cont)=>{
+    doc.setFont('helvetica','bold'); doc.setFontSize(30); doc.setTextColor(35,105,78);
+    doc.text(String(i+1).padStart(2,'0'), M, 78);
+    doc.setFontSize(10); doc.setTextColor(120); doc.setFont(FM,'normal');
+    const kick=((t.name||p.topic_id)+'  ·  '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')+(cont?'  ·  continued':'')).toUpperCase();
+    doc.text(kick, M+50, 70);
+    const kw=doc.getTextWidth(kick);
+    doc.setFont(F,'bold'); doc.setFontSize(14); doc.setTextColor(28,35,32);
+    let sub=p.subtitle||'', avail=W-50-kw-16;
+    if(doc.getTextWidth(sub)>avail){ doc.setFontSize(11); }
+    if(doc.getTextWidth(sub)>avail){ while(sub.length>1&&doc.getTextWidth(sub+'…')>avail) sub=sub.slice(0,-1); sub+='…'; }
+    doc.text(sub, 612-M, 74, {align:'right'});
+    doc.setDrawColor(28,35,32); doc.setLineWidth(1.4); doc.line(M, 88, 612-M, 88);
+    footer(i,p,cont);
+    return TOP;
+  };
   q.forEach((x,i)=>{
     if(i) doc.addPage();
     const p=x.p, t=TOPICS.find(z=>z.id===p.topic_id)||{};
-    // header
-    doc.setFont('helvetica','bold'); doc.setFontSize(30); doc.setTextColor(35,105,78);
-    doc.text(String(i+1).padStart(2,'0'), M, 78);
-    doc.setFontSize(10); doc.setTextColor(120); doc.setFont('courier','normal');
-    doc.text(((t.name||p.topic_id)+'  ·  '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')).toUpperCase(), M+50, 70);
-    doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(28,35,32);
-    doc.text(p.subtitle||'', 612-M, 74, {align:'right'});
-    doc.setDrawColor(28,35,32); doc.setLineWidth(1.4); doc.line(M, 88, 612-M, 88);
-    // prompt
-    doc.setFont('helvetica','normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32);
-    const promptLines=doc.splitTextToSize(p.prompt||'', W);
-    doc.text(promptLines, M, 112);
-    let y=112+promptLines.length*16+10;
-    // given box
+    let y=header(i,p,t,false), cont=false;
+    // prompt — flows onto continuation pages when it is long
+    doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32);
+    let lines=doc.splitTextToSize(p.prompt||'', W);
+    while(lines.length){
+      const n=Math.max(1, Math.floor((BOTTOM-y)/LH));
+      const chunk=lines.slice(0,n); lines=lines.slice(n);
+      doc.text(chunk, M, y); y+=chunk.length*LH;
+      if(lines.length){ doc.addPage(); cont=true; y=header(i,p,t,true); doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32); }
+    }
+    y+=10;
+    // given box — wrap width measured in the font it is drawn with
     if(p.given_data){
+      doc.setFont(FM,'normal'); doc.setFontSize(10);
       const gl=doc.splitTextToSize('GIVEN   '+p.given_data, W-24);
       const bh=gl.length*13+20;
+      if(y+bh>BOTTOM){ doc.addPage(); cont=true; y=header(i,p,t,true); }
       doc.setFillColor(247,251,253); doc.setDrawColor(224,220,208); doc.setLineWidth(.8);
       doc.roundedRect(M, y, W, bh, 3, 3, 'FD');
-      doc.setFont('courier','normal'); doc.setFontSize(10); doc.setTextColor(35,105,78);
+      doc.setFont(FM,'normal'); doc.setFontSize(10); doc.setTextColor(35,105,78);
       doc.text(gl, M+12, y+16); y+=bh+16;
     }
-    // work grid
+    // the work area always gets a full-height page if the text has eaten it
+    if(y>GRID_END-GRID_MIN){ doc.addPage(); cont=true; y=header(i,p,t,true); }
     doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(150);
     doc.text('WORK AREA — SHOW EVERY STEP', M, y+10);
     doc.setDrawColor(222,232,238); doc.setLineWidth(.5);
-    for(let gy=y+24; gy<668; gy+=22) doc.line(M, gy, 612-M, gy);
+    for(let gy=y+24; gy<GRID_END; gy+=22) doc.line(M, gy, 612-M, gy);
     // answer
     doc.setFontSize(8); doc.setTextColor(120); doc.text('ANSWER', M, 690);
     doc.setDrawColor(70,82,75); doc.setLineWidth(.8);
     doc.line(M, 712, 612-M, 712); doc.line(M, 736, 612-M, 736);
-    // footer (machine-readable for Cowork)
-    doc.setFontSize(7.5); doc.setTextColor(150); doc.setFont('courier','normal');
-    doc.text(`batch:${batchId}  problem:${p.id}`, M, 764);
-    doc.text(`${i+1} / ${q.length}`, 612-M, 764, {align:'right'});
   });
   return doc.output('blob');
 }
