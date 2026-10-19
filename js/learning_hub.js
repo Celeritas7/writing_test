@@ -74,7 +74,8 @@ $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 /* returns the allowlist row, null if not listed, or {error} if unreadable */
 async function authRole(email){
   if(!email) return null;
-  const {data,error}=await sb.from(AUTH_TABLE).select('email,role,name').ilike('email',email).limit(1);
+  // case-insensitive exact match: escape LIKE wildcards so j_doe@x.com can't match jadoe@x.com
+  const {data,error}=await sb.from(AUTH_TABLE).select('email,role,name').ilike('email',email.replace(/[\\%_]/g,m=>'\\'+m)).limit(1);
   if(error) return {error:error.message};
   return (data&&data[0])||null;
 }

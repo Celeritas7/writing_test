@@ -88,6 +88,14 @@ const JP_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
    so stamp the uuid — not the login email — or new rows won't match the old ones. */
 const JP_USER_ID = "5817df8a-043f-4aaf-9832-59ff82a6ae2e";
 const JP_DEFAULTS = {table:'', log:'', type:'ghost', n:20};
+/* Calendar days are the learner's local days, not UTC: a 07:00 JST session is
+   today, and a 1-day interval comes due at local midnight. */
+function ghDay(d){ d=d||new Date(); const two=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+two(d.getMonth()+1)+'-'+two(d.getDate()); }
+function ghDayPlus(days){ const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+days); return ghDay(d); }
+/* Rows in the Japanese project belong to the user id in Connection settings;
+   JP_USER_ID is only the default for that field. */
+function jpUser(){ return ((ghCfg().user||'')+'').trim(); }
+function jpUserQ(){ const u=jpUser(); return u?'user_id=eq.'+encodeURIComponent(u)+'&':''; }
 
 let GH_PANEL=false, GH_PREVIEW=null, GH_TABLES=null;
 function ghWho(){ return (SESSION&&SESSION.user&&(SESSION.user.email||SESSION.user.id))||'ghost'; }
@@ -108,7 +116,8 @@ window.ghListTables=async()=>{
   renderGhost();
 };
 const ghCfg=()=>{ let c={}; try{ c=JSON.parse(localStorage.getItem('wt_jp_source')||'{}'); }catch(e){}
-  return Object.assign({}, JP_DEFAULTS, c, JP_URL?{url:JP_URL}:{}, JP_ANON_KEY?{key:JP_ANON_KEY}:{}, JP_USER_ID?{user:JP_USER_ID}:{}); };
+  const set={}; for(const k in c) if(c[k]!=null&&String(c[k]).trim()!=='') set[k]=c[k];
+  return Object.assign({}, JP_DEFAULTS, {url:JP_URL, key:JP_ANON_KEY, user:JP_USER_ID}, set); };
 const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
 window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; GH_PREVIEW=null; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
@@ -306,7 +315,7 @@ async function ghLoadLimits(){
   const list=GH.items.map(ghKeyOf).filter(Boolean);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
   try{
-    const r=await fetch(url+'/rest/v1/japanese_user_reviews?kanji=in.'+encodeURIComponent(inList)+'&select=kanji,direction,history',{headers:{apikey:key,Authorization:'Bearer '+key}});
+    const r=await fetch(url+'/rest/v1/japanese_user_reviews?'+jpUserQ()+'kanji=in.'+encodeURIComponent(inList)+'&select=kanji,direction,history',{headers:{apikey:key,Authorization:'Bearer '+key}});
     if(!r.ok) return;
     for(const row of await r.json()) GH.limit[ghRK(row.kanji,row.direction||'read')]=ghSlowLimit(row);
   }catch(e){}
@@ -581,7 +590,7 @@ async function jpUpdateReviews(log, url, key){
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
   const list=log.map(r=>r.kanji);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
-  const q=await fetch(`${url}/rest/v1/japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=id,kanji,direction,correct_count,wrong_count,user_id,history,step,lapses,seconds`,{headers:H});
+  const q=await fetch(`${url}/rest/v1/japanese_user_reviews?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,direction,correct_count,wrong_count,user_id,history,step,lapses,seconds`,{headers:H});
   const have=q.ok?await q.json():[];
   const byK={}; for(const r of have) byK[ghRK(r.kanji,r.direction||'read')]=r;
   const today=new Date(), iso=today.toISOString();
@@ -591,13 +600,13 @@ async function jpUpdateReviews(log, url, key){
     const slow=!!l.is_correct && (l.seconds||0) > ghSlowLimit(prev);
     const s=srsNext(prev, l.rating, slow);
     plan.push({kanji:l.kanji, direction:l.direction, seconds:l.seconds||0, days:Math.max(1,s.days), slow, halved:!!s.halved});
-    const next=new Date(today.getTime()+Math.max(1,s.days)*864e5).toISOString().slice(0,10);
+    const next=ghDayPlus(Math.max(1,s.days));
     const row={kanji:l.kanji, direction:l.direction, last_review:iso, next_review:next, last_rating:l.rating, updated_at:iso, step:s.step, lapses:s.lapses,
       seconds:Math.max(0, l.seconds|0),
       correct_count:(prev.correct_count||0)+(l.is_correct?1:0), wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
       history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0}].slice(-20)};
     /* user_id is text NOT NULL with no default — a new word 400s without it */
-    row.user_id=prev.user_id||l.user_id||JP_USER_ID||ghWho();
+    row.user_id=jpUser()||prev.user_id||l.user_id||ghWho();
     if(prev.id!=null) row.id=prev.id;
     return row;
   });
@@ -610,7 +619,7 @@ async function jpUpdateMarkings(items, url, key, who){
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
   if(!items.length) return 0;
   const inList='('+items.map(i=>'"'+String(i.kanji).replace(/"/g,'')+'"').join(',')+')';
-  const q=await fetch(`${url}/rest/v1/japanese_user_markings?kanji=in.${encodeURIComponent(inList)}&select=id,kanji,marking,user_id`,{headers:H});
+  const q=await fetch(`${url}/rest/v1/japanese_user_markings?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,marking,user_id`,{headers:H});
   const have=q.ok?await q.json():[];
   const byK={}; for(const r of have) byK[r.kanji]=r;
   const iso=new Date().toISOString();
@@ -621,7 +630,7 @@ async function jpUpdateMarkings(items, url, key, who){
     if(it.pass) mark = (cur>=1&&cur<=2) ? cur : 2;      // stay if already in first two, else 2
     else        mark = (cur>=3&&cur<=5) ? cur : 5;      // stay if already in last three, else 5
     const row={kanji:it.kanji, marking:mark, updated_at:iso, marked_at:iso};
-    row.user_id=prev.user_id||who||JP_USER_ID||ghWho();
+    row.user_id=jpUser()||prev.user_id||who||ghWho();
     if(prev.id!=null) row.id=prev.id;
     return row;
   });
@@ -660,7 +669,7 @@ async function ghSaveNow(){
   const jpKeyNow=(typeof JP!=='undefined'&&JP.key)||c.key;
   const jpUrlNow=(typeof JP!=='undefined'&&JP.url)||c.url;
   if(GH.ext&&!DEMO&&jpUrlNow&&jpKeyNow){
-    const today=new Date().toISOString().slice(0,10);
+    const today=ghDay();
     const log=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
       return {user_id:c.user||ghWho(), kanji:p.kanji||p.prompt, direction:ghDirOf(p), test_type:c.type||'ghost', test_date:today, is_correct:m===1, rating:m===1?5:m===2?3:1, seconds:ghSeconds(p.id)}; })
       .reduce((acc,r)=>{ const i=acc.findIndex(x=>x.kanji===r.kanji&&x.direction===r.direction);
@@ -733,7 +742,8 @@ function ghEnding(plan){
   const fmt=d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
   const list=wrong.map(w=>{ const x=by[ghRK(w.k,w.rev?'write':'read')]; const d=x?new Date(Date.now()+x.days*864e5):null;
     return {k:w.k, ans:w.ans, m:w.m, rev:w.rev, when:d?fmt(d):'—', days:x?x.days:null}; });
-  if(all&&n-right<=2) return {kind:'check', n, right, wrong:list};
+  // 18–19 of 20 is the check; smaller sheets scale (≥90 % right, or a single miss on 5+ words)
+  if(all&&(right/n>=0.9||(wrong.length===1&&n>=5))) return {kind:'check', n, right, wrong:list};
   if(!wrong.length) return null;
   return {kind:'list', n, right, wrong:list};
 }
@@ -792,8 +802,7 @@ function ghShowEnding(end){
     if(end.wrong) ghAnnotate(end.wrong);
     card.innerHTML=`<div class="gh-end-lb">Saved</div><div class="gh-end-big">${end.right} / ${end.n}</div><div class="gh-end-tx">${end.n-end.right} to review — dates are on the sheet.</div><button class="btn sm gh-end-exit" onclick="ghExit()">Exit test</button>`;
   } else {
-    ghPlaceMark(GH_CIRC_SVG, sc, -30, -24);
-    ghAnnotate(end.wrong);
+    ghAnnotate(end.wrong); // no mark on the score for this ending — the list is the message
     const rows=end.wrong.map(w=>`<li><span class="gh-end-m m${w.m}">${G[w.m]}</span><span class="gh-end-w">${esc(w.k)} <small class="gh-end-dir">${w.rev?'書':'読'}</small></span><span class="gh-end-d">${esc(w.when)}</span></li>`).join('');
     card.innerHTML=`<div class="gh-end-lb">${end.wrong.length} to review</div><div class="gh-end-big">${end.right} / ${end.n}</div><ul class="gh-end-ul">${rows}</ul><button class="btn sm gh-end-exit" onclick="ghExit()">Exit test</button>`;
   }
