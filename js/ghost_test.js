@@ -38,6 +38,7 @@ function renderGhost(){
       <button class="btn sm ghost gh-t" id="gh-erase" onclick="ghTool('erase')">◌ Eraser</button>
       <button class="btn sm ghost gh-t" id="gh-width" onclick="ghWidth()">Width: M</button>
       <button class="btn sm ghost gh-t ${GH.finger?'on':''}" id="gh-finger" onclick="ghFinger()" title="Write with your finger (page won't scroll while on)">☝ Finger</button>
+      <button class="btn sm ghost gh-t" onclick="ghUndo()" title="Undo last stroke (two-finger tap)">↶ Undo</button>
       <span class="gh-bar-sp"></span>
       <button class="btn sm ghost gh-t gh-boxes-b ${GH.boxes?'on':''}" onclick="ghBoxes()" title="Ruled boxes instead of plain lines (B)">▦ Boxes</button>
       <button class="btn sm ghost gh-t gh-paper-b ${GH.paper==='plain'?'on':''}" onclick="ghPaper()" title="Paper — blank white or warm graph paper">${GH.paper==='plain'?'□ Plain':'▤ Grid'}</button>
@@ -60,7 +61,6 @@ function renderGhost(){
       <div class="gh-tally"><div class="gh-tbar"><i class="t1" id="gh-t1"></i><i class="t2" id="gh-t2"></i><i class="t3" id="gh-t3"></i></div><div class="gh-tcnt"><span id="gh-cnt2">0 / ${GH.items.length} marked</span><span id="gh-tsum"></span></div></div>
       <div class="gh-rest">
         <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
-        <button class="btn sm ghost gh-t" onclick="ghUndo()">↶ Undo</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClearMarks()">Clear marks</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClear()">Clear ink</button>
         <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Ghost</button>
@@ -264,14 +264,15 @@ function ghFocus(id){
 }
 function ghPing(){ GH.act=Date.now(); }
 function ghTick(){
+  const now=Date.now(), dt=Math.min(now-(GH._last||now), GH_TICK*3)/1000; GH._last=now; // real elapsed time, capped so a throttled tab can't dump seconds in
   if(!GH.focus) return;
-  if(Date.now()-GH.act>GH_IDLE) return;                 // idle: clock paused
-  GH.time[GH.focus]=(GH.time[GH.focus]||0)+GH_TICK/1000; if(Math.round(GH.time[GH.focus]*2)%20===0) ghDraftSave();
+  if(now-GH.act>GH_IDLE||document.hidden) return;        // idle or tab hidden: clock paused
+  GH.time[GH.focus]=(GH.time[GH.focus]||0)+dt; if(Math.floor(GH.time[GH.focus])%10===0&&dt) ghDraftSave();
   const cell=document.querySelector('.gh-item[data-gid="'+String(GH.focus).replace(/"/g,'\\"')+'"] .gh-t-sec');
   if(cell) cell.textContent=Math.round(GH.time[GH.focus])+'s';
   ghClock(GH.focus);
 }
-function ghStartClock(){ clearInterval(GH._clock); GH._clock=setInterval(ghTick, GH_TICK); }
+function ghStartClock(){ clearInterval(GH._clock); GH._last=Date.now(); GH._clock=setInterval(ghTick, GH_TICK); }
 function ghSeconds(id){ return Math.round(GH.time[id]||0); }
 
 /* ---- Phase 2: slow-but-correct --------------------------------------
@@ -330,13 +331,14 @@ window.ghBrush=(b)=>{
   GH.brush = GH.brush===b ? 0 : b;
   ghApplyBrush();
   toast(GH.brush
-    ? 'Marker '+['','✓','△','✗'][GH.brush]+' — drag across items to mark'
+    ? 'Marker '+['','✓','△','✗'][GH.brush]+' armed — drag across items to mark. Pen is paused; tap the marker again to write.'
     : 'Cycle mode — tap an item number to cycle its mark', 2200);
   renderGhost();
 };
 function ghApplyBrush(){
   const sh=$('gh-sheet');
   if(ghCv) ghCv.style.pointerEvents = GH.brush ? 'none' : '';
+  document.body.classList.toggle('gh-marking', !!GH.brush);
   if(sh){ sh.style.cursor = GH.brush ? 'crosshair' : ''; sh.style.touchAction = GH.brush ? 'none' : ''; }
 }
 /* hit-test from the sheet: pointerdown captures the pointer, so per-item
@@ -380,7 +382,7 @@ let ghCtx,ghCv,ghCur=null;
 function ghInit(){
   ghCv=$('gh-ink'); if(!ghCv) return; ghCtx=ghCv.getContext('2d');
   ghResize();
-  ghCv.onpointerdown=e=>{ if(e.pointerType==='touch'&&!GH.finger) return; ghCv.setPointerCapture(e.pointerId); const p0=ghPos(e); const own=ghOwner(p0); ghFocus(own&&own.id); ghCur={w:GH_W[GH.wi],e:GH.tool==='erase',own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]}; };
+  ghCv.onpointerdown=e=>{ if(e.pointerType==='touch'&&!GH.finger) return; ghCv.setPointerCapture(e.pointerId); const p0=ghPos(e); const own=ghOwner(p0); ghFocus(own&&own.id); ghCur={w:GH_W[GH.wi],e:GH.tool==='erase',own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,cw:own?own.w:0,p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]}; };
   ghCv.onpointermove=e=>{ if(!ghCur) return; ghPing();
     const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
     for(const ev of evs){ const q=ghPos(ev); ghCur.p.push(q[0]-ghCur.ox, q[1]-ghCur.oy); }
@@ -388,7 +390,8 @@ function ghInit(){
   };
   ghCv.onpointerup=ghCv.onpointercancel=()=>{ if(!ghCur) return;
     if(ghRaf){ cancelAnimationFrame(ghRaf); ghRaf=0; }
-    if(ghCur.p.length>=4){ GH.strokes.push(ghCur); ghDraftSave(); }
+    if(ghCur.p.length<4) ghCur.p=[ghCur.p[0],ghCur.p[1],ghCur.p[0]+.01,ghCur.p[1]]; // a tap: round caps make this a dot (濁点, 、, the dot in 犬)
+    GH.strokes.push(ghCur); ghDraftSave();
     ghCur=null; ghRedraw();
   };
   ghApplyFinger();
@@ -397,7 +400,7 @@ function ghInit(){
   document.body.classList.toggle('gh-boxes', !!GH.boxes);
   document.body.classList.toggle('gh-paper-plain', GH.paper==='plain');
   document.body.classList.toggle('gh-more-on', !!GH.more);
-  addEventListener('resize',ghResize);
+  if(!window._ghResizeBound){ window._ghResizeBound=1; addEventListener('resize',()=>ghResize()); }
   ghInitBrush();
   ghScore();
   ghStartClock();
@@ -516,24 +519,26 @@ addEventListener('keydown',e=>{
   if(e.key==='b'||e.key==='B') ghBoxes();
   if(e.key==='Escape'&&document.body.classList.contains('gh-full')) ghFull(false);
 });
-function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1; ghCv.width=r.width*d; ghCv.height=r.height*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
+function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1, h=Math.max(r.height, sh.scrollHeight); ghCv.style.height=h+'px'; ghCv.width=r.width*d; ghCv.height=h*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
 /* strokes anchor to the item cell they start in, so re-queueing keeps ink with its question */
 function ghOwner(p){
-  const sh=$('gh-sheet'); if(!sh) return null;
-  const sr=sh.getBoundingClientRect();
+  const sh=$('gh-sheet'); if(!sh||!ghCv) return null;
+  const sr=ghCv.getBoundingClientRect();
   for(const el of sh.querySelectorAll('.gh-item')){
     const r=el.getBoundingClientRect(), x=r.left-sr.left, y=r.top-sr.top;
-    if(p[0]>=x&&p[0]<=x+r.width&&p[1]>=y&&p[1]<=y+r.height) return {id:el.dataset.gid, x, y};
+    if(p[0]>=x&&p[0]<=x+r.width&&p[1]>=y&&p[1]<=y+r.height) return {id:el.dataset.gid, x, y, w:r.width};
   }
   return null;
 }
+/* [x, y, k]: where the owning cell is now, and how much wider or narrower it is
+   than when the stroke was drawn — ink scales with the cell on reflow/rotation */
 function ghAnchor(s){
-  if(!s.own) return [0,0];
-  const sh=$('gh-sheet'); if(!sh) return [s.ox||0, s.oy||0];
+  if(!s.own) return [0,0,1];
+  const sh=$('gh-sheet'); if(!sh||!ghCv) return [s.ox||0, s.oy||0, 1];
   const el=sh.querySelector('.gh-item[data-gid="'+(window.CSS&&CSS.escape?CSS.escape(s.own):s.own)+'"]');
-  if(!el) return [s.ox||0, s.oy||0];
-  const sr=sh.getBoundingClientRect(), r=el.getBoundingClientRect();
-  return [r.left-sr.left, r.top-sr.top];
+  if(!el) return [s.ox||0, s.oy||0, 1];
+  const sr=ghCv.getBoundingClientRect(), r=el.getBoundingClientRect();
+  return [r.left-sr.left, r.top-sr.top, s.cw?r.width/s.cw:1];
 }
 function ghRedraw(){ if(!ghCtx) return; ghCtx.clearRect(0,0,ghCv.width,ghCv.height); for(const s of GH.strokes){ s.d=0; ghPaint(s); } if(ghCur){ ghCur.d=0; ghPaint(ghCur); } }
 let ghRaf=0;
@@ -545,9 +550,9 @@ function ghPaintTail(s){
   if(p.length-from<4){ if(p.length>=4) ghStyle(s), ghSeg(p,a,from); s.d=p.length; return; }
   ghStyle(s); ghSeg(p,a,from); s.d=p.length;
 }
-function ghSeg(p,a,from){ ghCtx.beginPath(); ghCtx.moveTo(p[from]+a[0],p[from+1]+a[1]); for(let i=from+2;i<p.length;i+=2) ghCtx.lineTo(p[i]+a[0],p[i+1]+a[1]); ghCtx.stroke(); }
+function ghSeg(p,a,from){ const k=a[2]||1; ghCtx.beginPath(); ghCtx.moveTo(p[from]*k+a[0],p[from+1]*k+a[1]); for(let i=from+2;i<p.length;i+=2) ghCtx.lineTo(p[i]*k+a[0],p[i+1]*k+a[1]); ghCtx.stroke(); }
 function ghStyle(s){ ghCtx.globalCompositeOperation=s.e?'destination-out':'source-over'; ghCtx.strokeStyle='#1a1a1a'; ghCtx.lineWidth=s.e?s.w*8:s.w; ghCtx.lineCap='round'; ghCtx.lineJoin='round'; }
-function ghPaint(s){ ghCtx.globalCompositeOperation=s.e?'destination-out':'source-over'; ghCtx.strokeStyle='#1a1a1a'; ghCtx.lineWidth=s.e?s.w*8:s.w; ghCtx.lineCap='round'; ghCtx.lineJoin='round'; const a=ghAnchor(s); ghCtx.beginPath(); const p=s.p; ghCtx.moveTo(p[0]+a[0],p[1]+a[1]); for(let i=2;i<p.length;i+=2) ghCtx.lineTo(p[i]+a[0],p[i+1]+a[1]); ghCtx.stroke(); }
+function ghPaint(s){ const a=ghAnchor(s); ghStyle(s); ghCtx.lineWidth*=a[2]||1; ghSeg(s.p,a,0); }
 function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
 window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
@@ -596,8 +601,7 @@ async function jpUpdateReviews(log, url, key){
     if(prev.id!=null) row.id=prev.id;
     return row;
   });
-  const r=await fetch(`${url}/rest/v1/japanese_user_reviews`,{method:'POST',headers:{...H, Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
-  if(!r.ok){ const b=await r.json().catch(()=>({})); throw new Error(b.message||('HTTP '+r.status)); }
+  await jpPostSplit(`${url}/rest/v1/japanese_user_reviews`, H, rows);
   return plan;
 }
 /* かな→kanji (written recall) also drives the 1–5 rating in japanese_user_markings:
@@ -621,9 +625,18 @@ async function jpUpdateMarkings(items, url, key, who){
     if(prev.id!=null) row.id=prev.id;
     return row;
   });
-  const r=await fetch(`${url}/rest/v1/japanese_user_markings`,{method:'POST',headers:{...H, Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
-  if(!r.ok){ const b=await r.json().catch(()=>({})); throw new Error(b.message||('HTTP '+r.status)); }
+  await jpPostSplit(`${url}/rest/v1/japanese_user_markings`, H, rows);
   return rows.length;
+}
+/* PostgREST wants every object in a bulk body to carry the same keys, so rows
+   that already have an id (upsert) and brand-new rows (insert) go separately */
+async function jpPostSplit(endpoint, H, rows){
+  const known=rows.filter(r=>r.id!=null), fresh=rows.filter(r=>r.id==null);
+  for(const [list,prefer] of [[known,'resolution=merge-duplicates,return=minimal'],[fresh,'return=minimal']]){
+    if(!list.length) continue;
+    const r=await fetch(endpoint,{method:'POST',headers:{...H, Prefer:prefer},body:JSON.stringify(list)});
+    if(!r.ok){ const b=await r.json().catch(()=>({})); throw new Error(b.message||('HTTP '+r.status)); }
+  }
 }
 let GH_SAVING=false;
 window.ghSave=async()=>{
@@ -637,6 +650,8 @@ async function ghSaveNow(){
     return {problem_id:p.id, topic_id:p.topic_id, correct:m===1, rating:m===1?5:m===2?3:1, notes:m===1?'Ghost check: matched the key.':m===2?'Ghost check: partly right — compare stroke/reading against the key.':'Ghost check: did not match the key.', graded_by:'ghost', graded_at:new Date().toISOString()}; });
   if(!rows.length){ toast('Mark at least one item first.'); return; }
   if(GH.locked) return;
+  const unmarked=GH.items.length-rows.length;
+  if(unmarked&&!confirm(unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked and will not be saved.\n\nSave the '+rows.length+' marked one'+(rows.length===1?'':'s')+' anyway? (Cancel to go back and mark the rest, or use Rest ✓.)')) return;
   if(!DEMO&&!GH.ext){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
   if(!GH.ext) ATTEMPTS=rows.concat(ATTEMPTS);
   let extra='', plan=null;
@@ -787,4 +802,4 @@ function ghShowEnding(end){
 window.ghEndClose=()=>{ document.querySelectorAll('[data-end]').forEach(x=>x.remove()); const c=$('gh-endcard'); if(c){ c.innerHTML=''; c.classList.remove('on'); } };
 window.ghShowEnding=ghShowEnding; window.ghEnding=ghEnding;
 /* the wide layout is only for this view — drop it when the route changes */
-addEventListener('hashchange',()=>{ if(!/ghost/.test(location.hash)) document.body.classList.remove('gh-view'); });
+addEventListener('hashchange',()=>{ if(!/ghost/.test(location.hash)){ document.body.classList.remove('gh-view'); clearInterval(GH._clock); GH.focus=null; } });
