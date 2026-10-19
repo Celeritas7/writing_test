@@ -189,7 +189,7 @@ function route(){
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-setup').textContent=DIR?'✓':'!';
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-setup').textContent=DIR?'✓':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':'iCloud folder not linked yet';
   if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
@@ -317,8 +317,8 @@ function renderBuild(){
   const sPills=[['all','All subjects'],...SUBJECTS.map(s=>[s.id,s.name])].map(([id,name])=>`<button class="pill-t ${buildSel.subject===id?'on':''}" onclick="buildSel.subject='${esc(id)}';buildSel.topic='smart';renderBuild()">${esc(name)}</button>`).join('');
   const subTopics=TOPICS.filter(t=>buildSel.subject==='all'||(t.subject_id||(SUBJECTS[0]||{}).id)===buildSel.subject).sort((a,b)=>(a.branch_no||0)-(b.branch_no||0));
   const tPills=[['smart','Smart mix'],...subTopics.map(t=>[t.id,t.name])].map(([id,name])=>`<button class="pill-t ${buildSel.topic===id?'on':''}" onclick="buildSel.topic='${esc(id)}';renderBuild()">${esc(name)}</button>`).join('');
-  const tierPills=['warmup','core','challenge'].map(x=>`<button class="pill-t ${buildSel.tiers.has(x)?'on':''}" onclick="tog('tiers','${x}')">${TIER_LABEL[x]}</button>`).join('');
-  const kindPills=['drill','concept','applied'].map(x=>`<button class="pill-t ${buildSel.kinds.has(x)?'on':''}" onclick="tog('kinds','${x}')">${x}</button>`).join('');
+  const tierPills=['warmup','core','challenge'].map(x=>`<button class="pill-t ${buildSel.tiers.has(x)?'on':''}" onclick="tog('tiers','${x}')">${buildSel.tiers.has(x)?'✓ ':''}${TIER_LABEL[x]}</button>`).join('');
+  const kindPills=['drill','concept','applied'].map(x=>`<button class="pill-t ${buildSel.kinds.has(x)?'on':''}" onclick="tog('kinds','${x}')">${buildSel.kinds.has(x)?'✓ ':''}${x}</button>`).join('');
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   const rows=q.map((x,i)=>`<div class="prow" title="${esc(x.p.prompt||'')}"><span class="num">${String(i+1).padStart(2,'0')}</span>
       <div style="flex:1"><div class="ttl">${esc(x.p.subtitle)}</div><div style="font-size:12.5px;color:var(--mute)">${esc((TOPICS.find(t=>t.id===x.p.topic_id)||{}).name||'')}</div></div>
@@ -330,9 +330,9 @@ function renderBuild(){
       <label>Subject</label><div class="pillbar" style="margin-bottom:14px">${sPills}</div>
       <label>Topic</label><div class="pillbar">${tPills}</div>
       <div class="formrow">
-        <div><label>Tiers</label><div class="pillbar">${tierPills}</div></div>
-        <div><label>Kinds</label><div class="pillbar">${kindPills}</div></div>
-        <div><label>Count</label><input type="number" min="1" max="20" value="${buildSel.count}" style="width:80px" onchange="buildSel.count=parseInt(this.value)||5;renderBuild()"></div>
+        <div><label>Tiers <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${tierPills}</div></div>
+        <div><label>Kinds <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${kindPills}</div></div>
+        <div><label>Count <span class="hint">· 1–20</span></label><input type="number" min="1" max="20" value="${buildSel.count}" style="width:80px" onchange="buildSel.count=Math.min(20,Math.max(1,parseInt(this.value)||5));renderBuild()"></div>
       </div>
     </div>
     <div class="plist">${rows}</div>
@@ -352,14 +352,14 @@ function renderReview(){
     return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" onclick="location.hash='topic/${esc(a.topic_id||'')}'" title="Open ${esc(t.name||'topic')}">
       <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span>
         <span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>
-        ${a.rating?`<span class="stars">${'★'.repeat(a.rating)}${'☆'.repeat(5-a.rating)}</span>`:''}
+        ${a.rating?`<span class="stars" title="Rating ${a.rating} of 5" aria-label="Rating ${a.rating} of 5">${'★'.repeat(a.rating)}${'☆'.repeat(5-a.rating)}</span>`:''}
         <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${new Date(a.graded_at).toLocaleDateString()}</span></div>
       ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
     </div>`;
   }).join('') || `<p style="color:var(--mute)">No feedback yet. Export a batch, solve it on your iPad, drop it in <span class="mono">solved/</span> — Cowork's feedback lands here.</p>`;
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
     <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch.</p>
-    ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
+    ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
     <h2 style="margin:0 0 4px">Feedback</h2>${fb}`;
 }
 
@@ -374,7 +374,7 @@ function renderSetup(){
     </div>
     <div class="card"><h2 style="margin-bottom:14px">One-time setup</h2>
       <div class="steps">
-        <div class="step"><div>Run <span class="mono">handoff/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
+        <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
         <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center"><button class="btn sm" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--red)'}">${DIR?'✓ linked: '+esc(DIR.name):'not linked'}</span></div>
           <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader.</div></div></div>
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>

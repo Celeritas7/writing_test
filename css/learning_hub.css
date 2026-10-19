@@ -32,6 +32,7 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .pill-t{font-family:"IBM Plex Mono",monospace;font-size:12px;border:1px solid var(--line);background:#fff;color:var(--soft);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
 .pill-t:hover{border-color:var(--ink)}
 .pill-t.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+label .hint{text-transform:none;letter-spacing:0;font-family:"IBM Plex Sans",sans-serif;color:var(--mute);font-weight:400}
 
 /* ---- 4 · cards, chips, messages, toast ----------------------------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
@@ -69,6 +70,7 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .subj-head .kicker{white-space:nowrap}
 .subj-head:hover{border-color:var(--accent)}
 .subj-head .chev{margin-left:auto;color:var(--mute);font-size:13px;transition:transform .15s}
+.subj-head .btn+.chev{margin-left:0}
 .subj-head.open .chev{transform:rotate(90deg)}
 .topic-card{cursor:pointer;position:relative;overflow:hidden;transition:border-color .15s,transform .15s,box-shadow .15s}
 .topic-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 14px rgba(28,35,32,.07)}
@@ -88,7 +90,7 @@ label{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:1px;
 .fb .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
 .fb .head b{white-space:nowrap}
 .fb .notes{font-size:13.5px;color:var(--soft);margin-top:6px}
-.stars{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--amber)}
+.stars{font-size:15px;letter-spacing:1px;color:#8a6212}
 .steps{counter-reset:s;display:flex;flex-direction:column;gap:14px}
 .step{display:flex;gap:14px;align-items:flex-start}
 .step::before{counter-increment:s;content:counter(s);font-family:"Space Grotesk",sans-serif;font-weight:700;flex:0 0 28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px}
@@ -119,13 +121,16 @@ body.gh-drawer-on .gh-dock{display:none}
 .gh-strip{display:flex;gap:8px;align-items:center;overflow-x:auto;scrollbar-width:none}
 .gh-strip::-webkit-scrollbar{display:none}
 .gh-strip .gh-mk-b{flex:1 1 0;justify-content:center;min-width:54px}
+.gh-strip .gh-mk-b.gh-cyc{flex-grow:2;white-space:nowrap}
 .gh-strip .gh-more{margin-left:auto}
 .gh-rest{display:none;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 body.gh-more-on .gh-rest{display:flex}
 .gh-rest .gh-save{margin-left:auto}
+.gh-rest .gh-danger{color:var(--red);border-color:#e2c2c0}
+.gh-rest .gh-danger:hover{border-color:var(--red)}
 .gh-sep{font:600 10px/1 "IBM Plex Mono",monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);padding-left:8px;margin-left:4px;border-left:1px solid var(--line);align-self:center}
 .gh-t.on{background:var(--ink);border-color:var(--ink);color:#fff}
-.gh-ghost{background:transparent;color:#c0392b;border:1px solid #c0392b}
+.gh-ghost{background:transparent;color:var(--soft);border:1px solid var(--line)}
 .gh-ghost.on{background:#c0392b;border-color:#c0392b;color:#fff}
 
 /* 7b · the sheet */
@@ -179,7 +184,6 @@ body.gh-more-on .gh-rest{display:flex}
 --------------------------------------------------------------------- */
 .nav-toggle{position:absolute;top:16px;right:10px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;border:1px solid var(--line);background:#fff;color:var(--soft);border-radius:7px;cursor:pointer;padding:0}
 .nav-toggle:hover{border-color:var(--ink);color:var(--ink)}
-.side{position:relative}
 body.nav-collapsed .shell{grid-template-columns:56px 1fr}
 body.nav-collapsed .side{padding:22px 8px;align-items:center}
 body.nav-collapsed .side .brand,body.nav-collapsed .nav-item span,body.nav-collapsed .side .foot #who,body.nav-collapsed .side .foot a{display:none}
@@ -274,6 +278,7 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .gh-rail-h{display:block;flex:1 0 100%;font:600 10.5px/1 "IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
   .gh-strip .gh-mk-b{flex:1 1 0;min-width:0;min-height:44px;font-size:15px;border-radius:10px}
   .gh-strip .gh-mk-b.c1:not(.on){color:#2e8b46}.gh-strip .gh-mk-b.c2:not(.on){color:#d98216}.gh-strip .gh-mk-b.c3:not(.on){color:#c0392b}
+  .gh-strip .gh-mk-b.gh-cyc{flex:1 0 100%;font-size:13px}
   .gh-more,.gh-x{display:none}
   .gh-tally{display:block;margin:12px 0 2px}
   .gh-tbar{display:flex;gap:3px;height:8px;border-radius:4px;overflow:hidden;background:#eeece4;margin-bottom:8px}
@@ -320,15 +325,18 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .main{padding:18px 16px}
   .grid2{grid-template-columns:1fr 1fr}
   h1{font-size:22px}
-  .subj-head{padding:10px 12px;gap:8px}.subj-head h2{font-size:16px}.subj-head .kicker{display:none}
+  .subj-head{padding:10px 12px;gap:8px;flex-wrap:wrap}.subj-head h2{font-size:16px}.subj-head .kicker{order:5;flex-basis:100%;font-size:10px}
   .prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:100%}
   .flow .arr{display:none}.flow{gap:8px}
 }
 /* 8b · phones: two columns, 88px of writing room per word, free scrolling,
    and no page header above the sticky pen bar. */
 @media (max-width:560px){
-  .main>.kicker,.main>h1,.gh-top,.main>p,.pillbar,.gh-inst,.gh-hd .s,.gh-hd .tt,.gh-hd .nm{display:none}
-  .main{padding:0 0 12px}
+  body.gh-view .main>.kicker,body.gh-view .main>h1,.gh-top,body.gh-view .main>p,body.gh-view .pillbar,.gh-inst,.gh-hd .s,.gh-hd .tt,.gh-hd .nm{display:none}
+  body.gh-view .main{padding:0 0 12px}
+  .side .brand,.nav-item .long{display:none}
+  .side .foot a{white-space:nowrap}
+  .side{padding:8px 10px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
   .gh-sheet{border-left:none;border-right:none;border-radius:0;box-shadow:none;padding:10px 0 6px;min-height:0}
   .gh-hd{padding:0 12px 8px}
   .gh-hd h2{font-size:16px}

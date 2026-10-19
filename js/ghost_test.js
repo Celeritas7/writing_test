@@ -40,7 +40,7 @@ function renderGhost(){
       <span class="gh-bar-sp"></span>
       <button class="btn sm ghost gh-t gh-boxes-b ${GH.boxes?'on':''}" onclick="ghBoxes()" title="Ruled boxes instead of plain lines (B)">▦ Boxes</button>
       <button class="btn sm ghost gh-t gh-paper-b ${GH.paper==='plain'?'on':''}" onclick="ghPaper()" title="Paper — blank white or warm graph paper">${GH.paper==='plain'?'□ Plain':'▤ Grid'}</button>
-      <button class="btn sm gh-t gh-ghost gh-ghost-top ${GH.ghost?'on':''}" onclick="ghToggle()">Ghost</button>
+      <button class="btn sm gh-t gh-ghost gh-ghost-top ${GH.ghost?'on':''}" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Ghost</button>
       <button class="btn sm ghost gh-t gh-full-btn gh-full-top" onclick="ghFull()" title="Full screen (F)">⤢</button>
     </div>
     <div class="gh-work">
@@ -49,7 +49,7 @@ function renderGhost(){
     <div class="gh-drawer">
       <div class="gh-strip">
         <span class="gh-rail-h">Mark by</span>
-        <button class="btn sm ghost gh-t gh-mk-b ${GH.brush===0?'on':''}" onclick="ghBrush(0)">Tap</button>
+        <button class="btn sm ghost gh-t gh-mk-b gh-cyc ${GH.brush===0?'on':''}" onclick="ghBrush(0)" title="Tap an item number to cycle ✓ → △ → ✗">⟳ Cycle</button>
         <button class="btn sm ghost gh-t gh-mk-b c1 ${GH.brush===1?'on':''}" onclick="ghBrush(1)">✓</button>
         <button class="btn sm ghost gh-t gh-mk-b c2 ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
         <button class="btn sm ghost gh-t gh-mk-b c3 ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
@@ -59,10 +59,10 @@ function renderGhost(){
       <div class="gh-tally"><div class="gh-tbar"><i class="t1" id="gh-t1"></i><i class="t2" id="gh-t2"></i><i class="t3" id="gh-t3"></i></div><div class="gh-tcnt"><span id="gh-cnt2">0 / ${GH.items.length} marked</span><span id="gh-tsum"></span></div></div>
       <div class="gh-rest">
         <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
-        <button class="btn sm ghost gh-t" onclick="ghClearMarks()">Clear marks</button>
         <button class="btn sm ghost gh-t" onclick="ghUndo()">↶ Undo</button>
-        <button class="btn sm ghost gh-t" onclick="ghClear()">Clear ink</button>
-        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()">Ghost</button>
+        <button class="btn sm ghost gh-t gh-danger" onclick="ghClearMarks()">Clear marks</button>
+        <button class="btn sm ghost gh-t gh-danger" onclick="ghClear()">Clear ink</button>
+        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Ghost</button>
         <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
         <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
         <button class="btn sm ghost gh-t" onclick="ghImportPanel()">目 Import</button>
@@ -305,7 +305,7 @@ window.ghBrush=(b)=>{
   ghApplyBrush();
   toast(GH.brush
     ? 'Marker '+['','✓','△','✗'][GH.brush]+' — drag across items to mark'
-    : 'Tap mode — tap an item number to cycle its mark', 2200);
+    : 'Cycle mode — tap an item number to cycle its mark', 2200);
   renderGhost();
 };
 function ghApplyBrush(){
@@ -524,7 +524,7 @@ function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.lef
 window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
 window.ghUndo=()=>{ GH.strokes.pop(); ghRedraw(); };
-window.ghClear=()=>{ GH.strokes=[]; ghRedraw(); };
+window.ghClear=()=>{ if(GH.strokes.length&&!confirm('Erase all handwriting on this sheet?\n\nYour marks stay. This cannot be undone.')) return; GH.strokes=[]; ghRedraw(); };
 window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-on',GH.ghost); document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost)); };
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
