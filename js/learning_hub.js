@@ -7,8 +7,9 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({'&':'&amp;
 const DAY = 864e5;
 const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
+const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
-let SESSION=null, ROLE=null, DEMO=false, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
+let SESSION=null, ROLE=null, DEMO=false, LOADED=false, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
 let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
@@ -77,8 +78,12 @@ async function authRole(email){
   if(error) return {error:error.message};
   return (data&&data[0])||null;
 }
+let ADMITTING=false;
 async function admit(s){
-  if(!s||SESSION||DEMO) return;
+  if(!s||SESSION||DEMO||ADMITTING) return;
+  ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
+}
+async function admitInner(s){
   const email=(s.user&&s.user.email||'').trim();
   const row=await authRole(email);
   if(row&&row.error){
@@ -116,6 +121,7 @@ async function boot(){
     SUBJECTS=s.error?[{id:'maths',sort_no:1,name:'Maths'}]:(s.data||[]);
     if(b.error||s.error) toast('Run schema.sql to enable subjects & batch tracking.', 5000);
   }
+  LOADED=true;
   await restoreDir();
   route();
 }
@@ -150,7 +156,8 @@ function pstatus(p, latest){
   const a=latest[p.id];
   if(!a) return {code:'new', label:'new', due:null};
   const weak = a.correct===false || (a.rating!=null && a.rating<=2);
-  const days = INTERVALS[a.rating||3]||3;
+  // rating comes from an external grader — clamp so a stray value can't break the ladder
+  const days = INTERVALS[rating5(a.rating)||3]||3;
   const due = new Date(new Date(a.graded_at).getTime() + days*DAY);
   if(weak) return {code:'weak', label:'weak', due, a};
   if(due<=new Date()) return {code:'due', label:'due for review', due, a};
@@ -183,7 +190,7 @@ function queue(topicId, subjectId, tiers, kinds, n){
 /* ---------- routing ---------- */
 window.addEventListener('hashchange', route);
 function route(){
-  if(!TOPICS.length) return;
+  if(!LOADED) return;
   const h=(location.hash||'#library').slice(1);
   const [page,arg]=h.split('/');
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
@@ -243,7 +250,8 @@ function renderLibrary(){
   $('main').innerHTML=`<div style="display:flex;align-items:baseline;gap:12px"><div><div class="kicker">Library</div><h1 style="margin:4px 0 6px">Your subjects</h1></div>
       <button class="btn ghost sm" style="margin-left:auto" onclick="toggleForm('sf-new')">＋ Subject</button></div>
     <p style="color:var(--mute);margin:0 0 14px">Subjects hold topics; each topic is a learning path: warm-ups → core → challenge. Or jump straight to <a href="#build">Build a batch</a>.</p>
-    <form id="sf-new" class="card hide" style="margin-bottom:20px" onsubmit="return addSubject(event)">
+    <form id="sf-new" class="card ${SUBJECTS.length?'hide':''}" style="margin-bottom:20px" onsubmit="return addSubject(event)">
+      ${SUBJECTS.length?'':'<p style="margin:0 0 10px"><b>Start here.</b> Add your first subject — Maths, Language study, anything you practise by hand. Topics and problems go inside it.</p>'}
       <div class="formrow" style="margin-top:0">
         <div><label>Subject name</label><input name="name" required placeholder="e.g. Mechanical"></div>
         <div style="flex:1;min-width:220px"><label>Tagline (optional)</label><input name="tagline" style="width:100%"></div>
@@ -254,23 +262,28 @@ function renderLibrary(){
 }
 window.toggleSub=id=>{ OPEN_SUBS.has(id)?OPEN_SUBS.delete(id):OPEN_SUBS.add(id); renderLibrary(); };
 window.toggleForm=id=>{ const f=$(id); f.classList.toggle('hide'); if(!f.classList.contains('hide')) f.querySelector('input').focus(); };
-window.addSubject=async e=>{
-  e.preventDefault(); const f=e.target, name=f.name.value.trim(); if(!name) return false;
+/* one submit at a time: the button is disabled while the insert is in flight */
+async function busy(f, fn){ if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
+window.addSubject=e=>{ e.preventDefault(); busy(e.target, ()=>addSubjectNow(e.target)); return false; };
+async function addSubjectNow(f){
+  const name=f.name.value.trim(); if(!name) return false;
   const row={id:slug(name), sort_no:SUBJECTS.length+1, name, tagline:f.tagline.value.trim()||null};
   if(SUBJECTS.some(s=>s.id===row.id)){ toast('That subject already exists.'); return false; }
   if(!DEMO){ const {error}=await sb.from('written_test_subjects').insert(row); if(error){ toast('Save failed: '+error.message,6000); return false; } }
   SUBJECTS.push(row); toast(name+' added.'); route(); return false;
 };
-window.addTopic=async(e,sid)=>{
-  e.preventDefault(); const f=e.target, name=f.name.value.trim(); if(!name) return false;
+window.addTopic=(e,sid)=>{ e.preventDefault(); busy(e.target, ()=>addTopicNow(e.target,sid)); return false; };
+async function addTopicNow(f,sid){
+  const name=f.name.value.trim(); if(!name) return false;
   const sibs=TOPICS.filter(t=>(t.subject_id||SUBJECTS[0].id)===sid);
   const row={id:slug(name), subject_id:sid, branch_no:Math.max(0,...TOPICS.map(t=>t.branch_no||0))+1, name, tagline:f.tagline.value.trim()||null, accent:ACCENTS[sibs.length%ACCENTS.length]};
   if(TOPICS.some(t=>t.id===row.id)){ toast('A topic with that name already exists.'); return false; }
   if(!DEMO){ const {error}=await sb.from('written_test_topics').insert(row); if(error){ toast('Save failed: '+error.message,6000); return false; } }
   TOPICS.push(row); toast(name+' added — now add problems to it.'); location.hash='topic/'+row.id; return false;
 };
-window.addProblem=async(e,tid)=>{
-  e.preventDefault(); const f=e.target, subtitle=f.subtitle.value.trim(), prompt=f.prompt.value.trim();
+window.addProblem=(e,tid)=>{ e.preventDefault(); busy(e.target, ()=>addProblemNow(e.target,tid)); return false; };
+async function addProblemNow(f,tid){
+  const subtitle=f.subtitle.value.trim(), prompt=f.prompt.value.trim();
   if(!subtitle||!prompt) return false;
   const sibs=PROBLEMS.filter(p=>p.topic_id===tid);
   const number=Math.max(0,...sibs.map(p=>p.number||0))+1;
@@ -352,7 +365,7 @@ function renderReview(){
     return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" onclick="location.hash='topic/${esc(a.topic_id||'')}'" title="Open ${esc(t.name||'topic')}">
       <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span>
         <span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>
-        ${a.rating?`<span class="stars" title="Rating ${a.rating} of 5" aria-label="Rating ${a.rating} of 5">${'★'.repeat(a.rating)}${'☆'.repeat(5-a.rating)}</span>`:''}
+        ${a.rating?`<span class="stars" title="Rating ${rating5(a.rating)} of 5" aria-label="Rating ${rating5(a.rating)} of 5">${'★'.repeat(rating5(a.rating))}${'☆'.repeat(5-rating5(a.rating))}</span>`:''}
         <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${new Date(a.graded_at).toLocaleDateString()}</span></div>
       ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
     </div>`;
@@ -408,10 +421,18 @@ async function writeText(dirHandle, name, text){
 }
 
 /* ---------- export ---------- */
+let EXPORTING=false;
 async function exportBatch(){
+  if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   if(!q.length) return;
   const m=$('exp-msg'); m.className='msg'; m.textContent='Building PDF…';
+  const btn=$('export-btn'); EXPORTING=true; if(btn){ btn.disabled=true; btn.textContent='Exporting…'; }
+  try{ await exportBatchNow(q, m); }
+  catch(e){ m.className='msg err'; m.textContent='Export failed: '+(e.message||e); }
+  finally{ EXPORTING=false; if(btn&&btn.isConnected){ btn.disabled=false; btn.textContent='Export PDF '+(DIR?'→ iPad folder':''); } }
+}
+async function exportBatchNow(q, m){
   const now=new Date();
   const stamp=now.toISOString().slice(0,16).replace(/[-T:]/g,'').replace(/^(\d{8})(\d{4})$/,'$1_$2');
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');

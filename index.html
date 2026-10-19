@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/learning_hub.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -44,6 +44,7 @@
 </div>
 
 <div id="toast" class="toast"></div>
+<script>if(!window.supabase||!window.jspdf){document.getElementById("gate-msg").className="msg err";document.getElementById("gate-msg").textContent="A library failed to load from the CDN. Check your connection and reload.";}</script>
 <script src="js/learning_hub.js"></script>
 <script src="js/ghost_test.js"></script>
 <script src="js/japanese_source.js"></script>

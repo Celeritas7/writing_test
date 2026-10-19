@@ -214,7 +214,7 @@ async function jpWords(path, label, order){
     const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
     const items=jpItems(usable, await jpDirections(usable.map(r=>r.kanji)));
     if(!items.length) throw new Error('No words with both kanji and reading in that set.');
-    GH.ext={label, items}; GH.marks={}; GH.strokes={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null;
+    GH.ext={label, items}; ghFresh(); GH_PANEL=false; JPS.err=null;
   }catch(e){ JPS.err=String(e.message||e); }
   JPS.busy=false; renderGhost();
 }
@@ -285,7 +285,7 @@ async function jpSetItems(rows, label, seq, force){
   const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
   if(!usable.length) throw new Error('No words with both kanji and reading in that set.');
   GH.ext={label, items:jpItems(usable, await jpDirections(usable.map(r=>r.kanji), force))};
-  GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null; JPS.busy=false; renderGhost();
+  ghFresh(); GH_PANEL=false; JPS.err=null; JPS.busy=false; renderGhost();
 }
 /* 読 N · 書 M of total — two bars, complete only when both reach total */
 function jpDayChip(label, total, done){
@@ -387,7 +387,7 @@ window.jpStartSmart=async()=>{
       const fresh=jpUniq(rows.filter(r=>!seen.has(r.id)&&r.kanji&&r.hiragana)).slice(0,JPS.n);
       if(!fresh.length) throw new Error('No untested words in that slice — try again.');
       GH.ext={label:'Not yet tested · all levels', items:jpItems(fresh, await jpDirections(fresh.map(r=>r.kanji)))};
-      GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.busy=false; renderGhost(); return;
+      ghFresh(); GH_PANEL=false; JPS.busy=false; renderGhost(); return;
     }
     await jpWords(`japanese_unified_words?id=in.(${ids.join(',')})&select=id,kanji,hiragana,meaning_en&limit=${JPS.n}`, (JP_MODES.find(m=>m[0]===JPS.mode)||[])[1]+' · all levels', ids);
   }catch(e){ JPS.err=String(e.message||e); JPS.busy=false; renderGhost(); }

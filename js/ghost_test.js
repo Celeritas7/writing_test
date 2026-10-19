@@ -198,9 +198,11 @@ window.ghSeed=async()=>{
   }
   TOPICS.push(topic); PROBLEMS.push(...rows);
   toast('Kanji topic created with 20 items.');
-  GH.topic=topic.id; GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost();
+  GH.topic=topic.id; ghFresh(); renderGhost();
 };
-window.ghPick=id=>{ GH.ext=null; GH.topic=id; GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost(); };
+/* fresh sheet: new marks, ink and clocks, and the post-save lock lifted */
+window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; };
+window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
 window.ghMark=(e,id)=>{
   e.stopPropagation();
   if(GH.brush) return ghSetMark(id, GH.brush);
@@ -373,6 +375,7 @@ function ghInit(){
   document.body.classList.toggle('gh-more-on', !!GH.more);
   addEventListener('resize',ghResize);
   ghInitBrush();
+  ghScore();
   ghStartClock();
   ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
@@ -483,6 +486,7 @@ window.ghFull=(on)=>{
 addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement) document.body.classList.remove('gh-full'); ghResizeSoon(); });
 addEventListener('orientationchange',()=>ghResizeSoon());
 addEventListener('keydown',e=>{
+  if(!document.body.classList.contains('gh-view')||!$('gh-sheet')) return;
   if(e.target&&/input|select|textarea/i.test(e.target.tagName)) return;
   if(e.key==='f'||e.key==='F') ghFull();
   if(e.key==='b'||e.key==='B') ghBoxes();
@@ -597,7 +601,13 @@ async function jpUpdateMarkings(items, url, key, who){
   if(!r.ok){ const b=await r.json().catch(()=>({})); throw new Error(b.message||('HTTP '+r.status)); }
   return rows.length;
 }
+let GH_SAVING=false;
 window.ghSave=async()=>{
+  if(GH_SAVING) return;
+  const sbtn=document.querySelector('.gh-save'); GH_SAVING=true; if(sbtn){ sbtn.disabled=true; sbtn.textContent='Saving…'; }
+  try{ await ghSaveNow(); } finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
+};
+async function ghSaveNow(){
   const log_n=n=>n+' result'+(n===1?'':'s')+' marked';
   const rows=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
     return {problem_id:p.id, topic_id:p.topic_id, correct:m===1, rating:m===1?5:m===2?3:1, notes:m===1?'Ghost check: matched the key.':m===2?'Ghost check: partly right — compare stroke/reading against the key.':'Ghost check: did not match the key.', graded_by:'ghost', graded_at:new Date().toISOString()}; });
@@ -654,9 +664,9 @@ window.ghSave=async()=>{
   if(!end){ ghExit(); return; }
   GH.locked=true; $('gh-sheet').classList.add('locked'); ghDrawer(true);
   ghShowEnding(end);
-};
+}
 /* Exit: the sheet is done — wipe marks, ink and clocks and start a fresh one. */
-window.ghExit=()=>{ GH.locked=false; GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; renderGhost(); };
+window.ghExit=()=>{ ghFresh(); renderGhost(); };
 
 /* ---- Phase 3: endings — drawn on the paper, the way a teacher would ------
    Scored per word (worst mark wins, so a ✗ that came back 5 later still

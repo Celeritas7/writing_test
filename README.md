@@ -35,7 +35,7 @@ css/learning_hub.css       all styles, 8 commented sections, every @media in §8
 js/learning_hub.js         app: auth, data, library / build / review / setup views
 js/ghost_test.js           ghost test: sheet, ink, marking, per-word clock, SRS ladder
 js/japanese_source.js      import from the second Supabase project (japanese_* tables)
-sql/schema.sql             run once in Supabase
+sql/schema.sql             run once in Supabase (sql/ is git-ignored — keep it locally)
 run-written-test-local.bat local server — serves the whole folder, subfolders included
 ```
 `learning_hub.html` and the `.bat` stay at the repo root next to `index.html`; the
