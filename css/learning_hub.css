@@ -96,6 +96,8 @@ label .hint{text-transform:none;letter-spacing:0;font-family:"IBM Plex Sans",san
 .tile .sub{font-size:13px;color:var(--soft)}
 .tile .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 a.btn{text-decoration:none}
+a.topic-card{display:block;color:inherit;text-decoration:none}
+.topic-card:focus-visible,.subj-head:focus-visible,.fb:focus-visible,.gh-n:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tile .marks{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 12px;font-size:14px}
 .tile .marks li{display:flex;gap:6px;align-items:center;min-width:0}.tile .marks li span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tile .marks .gh-mk{margin:0;font-size:14px;width:16px;text-align:center}
@@ -174,15 +176,15 @@ body.gh-marking #gh-pen,body.gh-marking #gh-erase,body.gh-marking #gh-width{opac
 
 /* 7c · one item */
 .gh-item{position:relative;padding:6px 0 108px}
-.gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
+.gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
 .gh-n:hover{background:#f1efe7}
 .gh-w{font-size:17px;border-bottom:1.5px solid var(--ink);padding-bottom:1px}
 /* meaning→カタカナ prompt: the cue is English, so it gets latin type at a
    smaller size and a quieter colour — it reads as a clue, not as the answer. */
 .gh-w.en{font-family:Georgia,'Iowan Old Style',serif;font-size:14.5px;font-style:italic;letter-spacing:.1px;color:#5b5346}
 .gh-mk{position:relative;z-index:3;margin-left:6px;font-size:16px;font-weight:700;vertical-align:middle}
-.gh-n.m1{color:#2e8b46}.gh-n.m2{color:#d98216}.gh-n.m3{color:#c0392b}
-.gh-mk.ok{color:#2e8b46}.gh-mk.mid{color:#d98216}.gh-mk.bad{color:#c0392b}
+.gh-n.m1{color:#2e8b46}.gh-n.m2{color:#a95f06}.gh-n.m3{color:#c0392b}
+.gh-mk.ok{color:#2e8b46}.gh-mk.mid{color:#a95f06}.gh-mk.bad{color:#c0392b}
 .gh-g{position:absolute;left:0;right:4px;top:38px;font-size:19px;line-height:1.15;color:#c0392b;opacity:0;transition:opacity .15s;pointer-events:none;overflow-wrap:anywhere}
 .gh-sheet.ghost-on .gh-g{opacity:.45}
 .gh-item.retry .gh-n{background:#c0392b;color:#fff}
@@ -191,7 +193,7 @@ body.gh-marking #gh-pen,body.gh-marking #gh-erase,body.gh-marking #gh-width{opac
 /* 7d · per-word clock. .gh-t-sec is the quiet running seconds; .gh-clk is
    the slow flag — it appears only once the word passes 1.5x its own median,
    i.e. a ✓ here will be scheduled at half the interval. */
-.gh-t-sec{font:600 9px/1 "IBM Plex Mono",monospace;letter-spacing:.5px;color:var(--mute);margin-left:6px;opacity:.75}
+.gh-t-sec{font:600 10.5px/1 "IBM Plex Mono",monospace;letter-spacing:.5px;color:var(--soft);margin-left:6px}
 .gh-clk{display:none;margin-left:5px;font-size:12px;line-height:1;color:#b4531f}
 .gh-clk.on{display:inline-block}
 
@@ -301,7 +303,7 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .gh-strip{flex-wrap:wrap;overflow:visible}
   .gh-rail-h{display:block;flex:1 0 100%;font:600 10.5px/1 "IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
   .gh-strip .gh-mk-b{flex:1 1 0;min-width:0;min-height:44px;font-size:15px;border-radius:10px}
-  .gh-strip .gh-mk-b.c1:not(.on){color:#2e8b46}.gh-strip .gh-mk-b.c2:not(.on){color:#d98216}.gh-strip .gh-mk-b.c3:not(.on){color:#c0392b}
+  .gh-strip .gh-mk-b.c1:not(.on){color:#2e8b46}.gh-strip .gh-mk-b.c2:not(.on){color:#a95f06}.gh-strip .gh-mk-b.c3:not(.on){color:#c0392b}
   .gh-strip .gh-mk-b.gh-cyc{flex:1 0 100%;font-size:13px}
   .gh-more,.gh-x{display:none}
   .gh-tally{display:block;margin:12px 0 2px}
@@ -344,7 +346,8 @@ body.gh-full .gh-exit{display:inline-flex!important}
   body.nav-collapsed .nav-toggle{position:static;transform:rotate(90deg);margin-left:auto}
   .side{position:sticky;top:0;height:auto;flex-direction:row;align-items:center;gap:2px;padding:10px 12px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;z-index:5}
   .side .brand{padding:0 10px 0 4px}.side .brand .kicker{display:none}.side .brand h3{font-size:14px;white-space:nowrap}
-  .nav-item{padding:7px 10px;font-size:13px}.nav-item .cnt{display:none}
+  .nav-item{padding:10px 10px;min-height:44px;font-size:13px}.nav-item .cnt{display:none}
+  .side .foot a{padding:12px 4px;display:inline-block}
   .side .foot{margin:0 0 0 auto;border:none;padding:0 4px;display:flex;align-items:center;gap:8px}.side .foot #who{display:none}
   .main{padding:18px 16px}
   .grid2{grid-template-columns:1fr 1fr}
@@ -391,7 +394,7 @@ body.gh-boxes.gh-paper-plain .gh-item>.gh-n{background:none;border-right:none;bo
 body.gh-boxes .gh-grid{column-gap:14px;row-gap:14px;background:none}
 body.gh-boxes .gh-item{padding:0 0 118px;border:1px solid var(--gh-box-edge);border-radius:5px;background:var(--gh-box-bg);box-shadow:inset 0 1px 0 #fff;overflow:hidden}
 body.gh-full.gh-boxes .gh-item{padding:0 0 40px}
-body.gh-boxes .gh-item>.gh-n{margin:0;border-radius:4px 0 4px 0;min-width:30px;height:26px;font-size:12px;color:var(--mute);background:var(--gh-box-tab);border-right:1px solid var(--gh-box-edge);border-bottom:1px solid var(--gh-box-edge);float:left;margin-right:7px}
+body.gh-boxes .gh-item>.gh-n{margin:0;border-radius:4px 0 4px 0;min-width:44px;height:30px;font-size:12px;color:var(--mute);background:var(--gh-box-tab);border-right:1px solid var(--gh-box-edge);border-bottom:1px solid var(--gh-box-edge);float:left;margin-right:7px}
 body.gh-boxes .gh-item>.gh-n:hover{filter:brightness(.96)}
 body.gh-boxes .gh-w{border-bottom:none;display:inline-block;padding:4px 6px 3px 0;line-height:1.3}
 body.gh-boxes .gh-item::before{content:"";position:absolute;left:0;right:0;top:30px;bottom:0;z-index:0;background-image:linear-gradient(var(--gh-box-grid) 1px,transparent 1px),linear-gradient(90deg,var(--gh-box-grid) 1px,transparent 1px);background-size:19px 19px;pointer-events:none}

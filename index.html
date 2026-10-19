@@ -21,7 +21,7 @@
       <input id="email" type="email" placeholder="you@example.com" style="flex:1">
       <button id="send-link" class="btn ghost">Send link</button>
     </div>
-    <div id="gate-msg" class="msg"></div>
+    <div id="gate-msg" class="msg" role="status" aria-live="polite"></div>
     <p style="margin:12px 0 0;font-size:12.5px"><a href="#" id="email-toggle">Use an email link instead</a></p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
       <button id="demo-btn" class="btn ghost sm">Explore with sample data</button>
@@ -32,7 +32,7 @@
 <div id="app" class="shell hide">
   <aside class="side">
     <div class="brand"><h3>Learning Hub</h3></div>
-    <button id="nav-toggle" class="nav-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
+    <button id="nav-toggle" class="nav-toggle" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
     <a class="nav-item" href="#home" data-nav="home">Home <span class="cnt" id="cnt-home"></span></a>
     <a class="nav-item" href="#library" data-nav="library">Library <span class="cnt" id="cnt-lib"></span></a>
     <a class="nav-item" href="#build" data-nav="build"><span class="lbl">Build<span class="long"> a batch</span></span> <span class="cnt" id="cnt-due"></span></a>
@@ -44,7 +44,7 @@
   <main class="main" id="main"></main>
 </div>
 
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>if(!window.supabase||!window.jspdf){document.getElementById("gate-msg").className="msg err";document.getElementById("gate-msg").textContent="A library failed to load from the CDN. Check your connection and reload.";}</script>
 <script src="js/learning_hub.js"></script>
 <script src="js/ghost_test.js"></script>

@@ -22,6 +22,16 @@ const idb = {
   async set(k,v){ const d=await this.db(); return new Promise((res,rej)=>{ const t=d.transaction('kv','readwrite').objectStore('kv').put(v,k); t.onsuccess=()=>res(); t.onerror=()=>rej(t.error); }); }
 };
 
+/* Every view is rendered with innerHTML, so accessibility attributes that
+   depend on structure are filled in once here instead of in every template:
+   a <label> directly before a field gets for/id, and pill toggles mirror
+   their .on state into aria-pressed. */
+let LBL=0;
+function a11yPass(root){
+  for(const l of root.querySelectorAll('label:not([for])')){ const f=l.nextElementSibling; if(f&&/^(INPUT|SELECT|TEXTAREA)$/.test(f.tagName)){ if(!f.id) f.id='f'+(++LBL); l.htmlFor=f.id; } }
+  for(const b of root.querySelectorAll('.pill-t:not([aria-pressed])')) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+}
+new MutationObserver(()=>a11yPass($('main'))).observe($('main'),{childList:true,subtree:true});
 function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms); }
 
 /* ---------- sidebar collapse ----------------------------------------
@@ -30,6 +40,7 @@ const NAV_ICONS={home:'⌂', library:'▤', build:'✎', review:'★', ghost:'�
 (function initNav(){
   for(const el of document.querySelectorAll('.nav-item')) el.dataset.icon=NAV_ICONS[el.dataset.nav]||'•';
   const b=document.getElementById('nav-toggle'); if(!b) return;
+  new MutationObserver(()=>b.setAttribute('aria-expanded', String(!document.body.classList.contains('nav-collapsed')))).observe(document.body,{attributes:true,attributeFilter:['class']});
   const set=on=>{ document.body.classList.toggle('nav-collapsed',on);
     b.title=b.ariaLabel=on?'Expand sidebar':'Collapse sidebar';
     try{ localStorage.setItem('lh-nav-collapsed', on?'1':'0'); }catch(e){}
@@ -205,7 +216,7 @@ function route(){
   if(!LOADED) return;
   // phones land on the dashboard; a wide screen opens straight into the Library
   const h=(location.hash||(matchMedia('(max-width:760px)').matches?'#home':'#library')).slice(1);
-  const [page,arg]=h.split('/');
+  const [page,argRaw]=h.split('/'); const arg=argRaw?decodeURIComponent(argRaw):argRaw;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
@@ -224,7 +235,7 @@ function topicCard(t){
     const st=topicStats(t.id);
     const pct=st.total?Math.round(100*st.attempted/st.total):0;
     const flags=[st.weak?`<span class="chip weak">${st.weak} weak</span>`:'', st.due?`<span class="chip due">${st.due} due</span>`:''].join('');
-    return `<div class="card topic-card" style="padding:14px 16px" onclick="location.hash='topic/${t.id}'">
+    return `<a class="card topic-card" style="padding:14px 16px" href="#topic/${encodeURIComponent(t.id)}">
       <div class="bar" style="background:${esc(t.accent||'#23694e')}"></div>
       <div style="padding-left:8px">
         <h3 style="margin-bottom:2px">${esc(t.name)}</h3>
@@ -232,7 +243,7 @@ function topicCard(t){
         <div class="meter" style="margin-top:9px"><i style="width:${pct}%"></i></div>
         ${flags?`<div class="stat-row" style="margin-top:8px">${flags}</div>`:''}
       </div>
-    </div>`;
+    </a>`;
 }
 function renderLibrary(){
   if(!OPEN_SUBS) OPEN_SUBS=new Set(SUBJECTS.length?[SUBJECTS[0].id]:[]);
@@ -243,7 +254,7 @@ function renderLibrary(){
     for(const t of topics){ const st=topicStats(t.id); weak+=st.weak; due+=st.due; total+=st.total; attempted+=st.attempted; }
     const flags=[weak?`<span class="chip weak">${weak} weak</span>`:'', due?`<span class="chip due">${due} due</span>`:''].join('');
     return `<section style="margin-bottom:12px">
-      <div class="subj-head ${open?'open':''}" onclick="toggleSub('${esc(s.id)}')">
+      <div class="subj-head ${open?'open':''}" role="button" tabindex="0" aria-expanded="${open}" onclick="toggleSub('${esc(s.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSub('${esc(s.id)}')}">
         <h2>${esc(s.name)}</h2>
         <span class="kicker">${topics.length} topic${topics.length===1?'':'s'} · ${attempted}/${total} attempted</span>${flags}
         <button class="btn ghost sm" style="margin-left:auto" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')">＋ Topic</button>
@@ -468,14 +479,14 @@ function renderReview(){
   const shown=entries.slice(0,REV.limit);
   const fb=shown.map(e=>{
     if(e.kind==='fb'){ const a=e.a, p=PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}, t=TOPICS.find(x=>x.id===a.topic_id)||{};
-      return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" onclick="location.hash='topic/${esc(a.topic_id||'')}'" title="Open ${esc(t.name||'topic')}">
+      return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" role="link" tabindex="0" onclick="location.hash='topic/${esc(a.topic_id||'')}'" onkeydown="if(event.key==='Enter')this.click()" title="Open ${esc(t.name||'topic')}">
         <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${stars(a.rating)}
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${fmtDate(a.graded_at)}</span></div>
         ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
         ${a.correct?'':`<div class="acts"><button class="btn sm ghost" onclick="event.stopPropagation();practise('${esc(a.topic_id)}')">Practise again</button></div>`}</div>`; }
     if(e.kind==='ghost'){ const n=e.items.length, right=e.items.filter(a=>a.correct).length, wrong=e.items.filter(a=>!a.correct);
       const names=wrong.map(a=>esc((PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}).subtitle)).join(' · ');
-      return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}" onclick="ghPick('${esc(e.topic_id)}');location.hash='ghost'" title="Open this sheet in the ghost test">
+      return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}" role="link" tabindex="0" onclick="ghPick('${esc(e.topic_id)}');location.hash='ghost'" onkeydown="if(event.key==='Enter')this.click()" title="Open this sheet in the ghost test">
         <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">ghost · ${fmtDate(e.graded_at)}</span></div>
         <div class="notes">${wrong.length?'To review: '+names:'Every word right.'}</div></div>`; }

@@ -23,7 +23,7 @@ function renderGhost(){
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
-    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" onpointerup="ghMark(event,'${esc(p.id)}')">${i+1}.</span> <span class="gh-w${p.mean?' en':''}">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
+    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" role="button" tabindex="0" aria-label="Item ${i+1}: ${m?['','correct','partly','wrong'][m]:'unmarked'} — press to mark" onpointerup="ghMark(event,'${esc(p.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ghMark(event,'${esc(p.id)}')}">${i+1}.</span> <span class="gh-w${p.mean?' en':''}">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
   }).join('');
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
   const nMean=GH.items.filter(p=>p.mean).length;
@@ -541,9 +541,18 @@ addEventListener('orientationchange',()=>ghResizeSoon());
 addEventListener('keydown',e=>{
   if(!document.body.classList.contains('gh-view')||!$('gh-sheet')) return;
   if(e.target&&/input|select|textarea/i.test(e.target.tagName)) return;
-  if(e.key==='f'||e.key==='F') ghFull();
-  if(e.key==='b'||e.key==='B') ghBoxes();
-  if(e.key==='Escape'&&document.body.classList.contains('gh-full')) ghFull(false);
+  const k=e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey)&&k==='z'){ e.preventDefault(); ghUndo(); return; }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(k==='f') ghFull();
+  else if(k==='b') ghBoxes();
+  else if(k==='p') ghTool('pen');
+  else if(k==='e') ghTool('erase');
+  else if(k==='g') ghToggle();
+  else if(k==='1'||k==='2'||k==='3') ghBrush(+k);
+  else if(k==='0') ghBrush(GH.brush);
+  else if(k==='?') toast('Shortcuts — P pen · E eraser · 1/2/3 arm ✓ △ ✗ · 0 back to pen · Ctrl+Z undo · G ghost key · B boxes · F full screen · Esc leave full screen', 9000);
+  else if(k==='escape'&&document.body.classList.contains('gh-full')) ghFull(false);
 });
 function ghResize(){ const sh=$('gh-sheet'); if(!sh||!ghCv) return; const r=sh.getBoundingClientRect(),d=devicePixelRatio||1, h=Math.max(r.height, sh.scrollHeight); ghCv.style.height=h+'px'; ghCv.width=r.width*d; ghCv.height=h*d; ghCtx.setTransform(d,0,0,d,0,0); ghRedraw(); }
 /* strokes anchor to the item cell they start in, so re-queueing keeps ink with its question */
