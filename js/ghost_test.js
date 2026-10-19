@@ -9,6 +9,7 @@ function ghostTopics(){
 }
 function renderGhost(){
   document.body.classList.add('gh-view');
+  if(!ghDraftChecked){ ghDraftRestore().then(ok=>{ renderGhost(); if(ok) toast('Picked up where you left off — unsaved sheet restored.', 4000); }); return; }
   const tops=ghostTopics();
   if(!tops.length&&!GH.ext){ $('main').innerHTML=`<div class="kicker">Ghost test</div><h1 style="margin:4px 0 6px">Write on screen</h1>
     <div class="card" style="max-width:640px"><p style="margin:0 0 10px">Ghost test is for <b>language study</b> — word ⇄ reading pairs you write by hand.</p>
@@ -201,7 +202,30 @@ window.ghSeed=async()=>{
   GH.topic=topic.id; ghFresh(); renderGhost();
 };
 /* fresh sheet: new marks, ink and clocks, and the post-save lock lifted */
-window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; };
+window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; ghDraftClear(); };
+
+/* ---- local draft ----------------------------------------------------
+   Ink, marks, clocks and the loaded set go to IndexedDB (the hub's idb kv
+   store) a second after each change, and come back on the next visit for
+   7 days. Nothing leaves the device; a save or a new set clears it. */
+const GH_DRAFT_KEY='gh-draft', GH_DRAFT_TTL=7*864e5;
+let ghDraftT=0;
+function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
+  if(GH.locked||!GH.items.length||typeof idb==='undefined') return;
+  const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
+  if(!strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
+  try{ await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq, marks:GH.marks, strokes, time:GH.time}); }catch(e){}
+},800); }
+function ghDraftClear(){ clearTimeout(ghDraftT); if(typeof idb!=='undefined') idb.set(GH_DRAFT_KEY,null).catch(()=>{}); }
+let ghDraftChecked=false;
+async function ghDraftRestore(){
+  if(ghDraftChecked||typeof idb==='undefined') return false; ghDraftChecked=true;
+  let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
+  if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
+  if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
+  GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{}; GH.locked=false;
+  return true;
+}
 window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
 window.ghMark=(e,id)=>{
   e.stopPropagation();
@@ -242,7 +266,7 @@ function ghPing(){ GH.act=Date.now(); }
 function ghTick(){
   if(!GH.focus) return;
   if(Date.now()-GH.act>GH_IDLE) return;                 // idle: clock paused
-  GH.time[GH.focus]=(GH.time[GH.focus]||0)+GH_TICK/1000;
+  GH.time[GH.focus]=(GH.time[GH.focus]||0)+GH_TICK/1000; if(Math.round(GH.time[GH.focus]*2)%20===0) ghDraftSave();
   const cell=document.querySelector('.gh-item[data-gid="'+String(GH.focus).replace(/"/g,'\\"')+'"] .gh-t-sec');
   if(cell) cell.textContent=Math.round(GH.time[GH.focus])+'s';
   ghClock(GH.focus);
@@ -299,7 +323,7 @@ function ghSetMark(id, m){
     const n=cell.querySelector('.gh-n');
     if(n) n.className='gh-n'+(m?' m'+m:'');
   }
-  ghScore();
+  ghScore(); ghDraftSave();
   if(m===3&&GH.seq) ghRequeue(id);
 }
 window.ghBrush=(b)=>{
@@ -346,7 +370,7 @@ window.ghClearMarks=()=>{
   const n=Object.keys(GH.marks).filter(k=>GH.marks[k]).length;
   if(!n) return toast('No markings to clear', 1800);
   if(!confirm('Clear all '+n+' markings on this sheet?\n\nYour handwriting stays. This cannot be undone.')) return;
-  GH.marks={};
+  GH.marks={}; ghDraftSave();
   renderGhost();
   toast('All markings cleared', 2000);
 };
@@ -364,7 +388,7 @@ function ghInit(){
   };
   ghCv.onpointerup=ghCv.onpointercancel=()=>{ if(!ghCur) return;
     if(ghRaf){ cancelAnimationFrame(ghRaf); ghRaf=0; }
-    if(ghCur.p.length>=4) GH.strokes.push(ghCur);
+    if(ghCur.p.length>=4){ GH.strokes.push(ghCur); ghDraftSave(); }
     ghCur=null; ghRedraw();
   };
   ghApplyFinger();
@@ -527,8 +551,8 @@ function ghPaint(s){ ghCtx.globalCompositeOperation=s.e?'destination-out':'sourc
 function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
 window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
-window.ghUndo=()=>{ GH.strokes.pop(); ghRedraw(); };
-window.ghClear=()=>{ if(GH.strokes.length&&!confirm('Erase all handwriting on this sheet?\n\nYour marks stay. This cannot be undone.')) return; GH.strokes=[]; ghRedraw(); };
+window.ghUndo=()=>{ GH.strokes.pop(); ghRedraw(); ghDraftSave(); };
+window.ghClear=()=>{ if(GH.strokes.length&&!confirm('Erase all handwriting on this sheet?\n\nYour marks stay. This cannot be undone.')) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
 window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-on',GH.ghost); document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost)); };
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
@@ -652,14 +676,18 @@ async function ghSaveNow(){
       }
     }catch(e){
       extra=' · reviews upsert failed ('+(e.message||e)+')';
+      let logged=false;
       try{
         const r=await fetch(`${jpUrlNow}/rest/v1/japanese_daily_test_log`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log.map(({seconds, ...r})=>r))});
+        logged=r.ok;
         extra += r.ok ? ' — saved to japanese_daily_test_log instead. Run sql/reviews_direction.sql.'
                       : ' — NOT SAVED. Run sql/reviews_direction.sql.';
       }catch(e2){ extra+=' — NOT SAVED.'; }
+      if(!logged){ toast('Save failed'+extra+' — your sheet is kept; check the connection and press Save results again.', 8000); return; }
     }
   } else if(GH.ext&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
+  ghDraftClear(); // the results are in the database now; nothing left to resume
   const end=ghEnding(plan);
   if(!end){ ghExit(); return; }
   GH.locked=true; $('gh-sheet').classList.add('locked'); ghDrawer(true);

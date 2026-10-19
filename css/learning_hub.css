@@ -45,6 +45,8 @@ label .hint{text-transform:none;letter-spacing:0;font-family:"IBM Plex Sans",san
 .chip.weak{color:#fff;background:var(--red);border-color:var(--red)}
 .chip.due{color:#fff;background:var(--amber);border-color:var(--amber)}
 .chip.new{color:var(--soft)}
+.chip.review{color:var(--blue);border-color:#c3d4e4}
+.chip.inbatch{color:var(--mute);border-style:dashed}
 .chip.mastered,.chip.ok{color:#fff;background:var(--ok);border-color:var(--ok)}
 .chip.status-exported{color:var(--blue)}.chip.status-graded{color:#fff;background:var(--ok);border-color:var(--ok)}.chip.status-solved{color:var(--amber)}
 .toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:12px 18px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:380px}

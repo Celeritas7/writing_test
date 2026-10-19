@@ -9,7 +9,7 @@ const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
-let SESSION=null, ROLE=null, DEMO=false, LOADED=false, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
+let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
 let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
@@ -84,6 +84,7 @@ async function admit(s){
   ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
 }
 async function admitInner(s){
+  // boot() is awaited here so a network throw ends in loadError rather than an unhandled rejection
   const email=(s.user&&s.user.email||'').trim();
   const row=await authRole(email);
   if(row&&row.error){
@@ -98,14 +99,21 @@ async function admitInner(s){
   }
   ROLE=row.role||'operator';
   SESSION=s;
-  boot();
+  try{ await boot(); }catch(e){ loadError(e.message||String(e)); }
 }
 sb.auth.onAuthStateChange((_e,s)=>{ admit(s); });
 sb.auth.getSession().then(({data})=>{ admit(data.session); });
 
 /* ---------- data ---------- */
+function loadError(msg){
+  $('main').innerHTML=`<div class="card" style="max-width:560px;margin-top:20px"><h2 style="margin:0 0 8px">Couldn't load your data</h2>
+    <p style="color:var(--soft);margin:0 0 14px">${esc(msg)}</p>
+    <button class="btn sm" onclick="boot()">Retry</button> <a href="#" onclick="document.getElementById('signout').click();return false" style="margin-left:12px;font-size:13px">Sign out</a></div>`;
+}
+window.boot=boot;
 async function boot(){
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
+  $('main').innerHTML='<p style="color:var(--mute);margin-top:20px">Loading…</p>';
   $('who').textContent = DEMO ? 'demo mode — nothing is saved' : ((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
   if(!DEMO){
     const [t,p,a,b,s] = await Promise.all([
@@ -115,7 +123,8 @@ async function boot(){
       sb.from('written_test_batches').select('*').order('created_at',{ascending:false}),
       sb.from('written_test_subjects').select('*').order('sort_no')
     ]);
-    for(const r of [t,p,a]) if(r.error){ toast('Load failed: '+r.error.message, 6000); return; }
+    const bad=[t,p,a].find(r=>r.error);
+    if(bad){ loadError(bad.error.message); return; }
     TOPICS=t.data||[]; PROBLEMS=p.data||[]; ATTEMPTS=a.data||[];
     BATCHES=b.error?[]:(b.data||[]); // tables may not exist until schema.sql is run
     SUBJECTS=s.error?[{id:'maths',sort_no:1,name:'Maths'}]:(s.data||[]);
@@ -174,6 +183,7 @@ function queue(topicId, subjectId, tiers, kinds, n){
   const latest=latestByProblem();
   const subOf=tid=>{ const t=TOPICS.find(x=>x.id===tid); return t?(t.subject_id||(SUBJECTS[0]||{}).id):null; };
   let pool=PROBLEMS.filter(p=>(topicId!=='smart' ? p.topic_id===topicId : (subjectId==='all'||subOf(p.topic_id)===subjectId)) && tiers.has(p.tier||'core') && kinds.has(p.kind||'drill'));
+  const out=new Set(); for(const b of BATCHES) if(b.status!=='graded') for(const id of (b.problem_ids||[])) out.add(id);
   const scored=pool.map(p=>{
     const s=pstatus(p, latest);
     let rank, why;
@@ -181,6 +191,7 @@ function queue(topicId, subjectId, tiers, kinds, n){
     else if(s.code==='due'){ rank=1; why='due'; }
     else if(s.code==='new'){ rank=2; why='new'; }
     else { rank=3; why='review'; }
+    if(out.has(p.id)){ rank+=10; why='in batch'; } // exported but not graded yet — don't send it out twice
     return {p, s, rank, why, tie:(s.due?s.due.getTime():0)+(p.unit_no||p.number||0)/100};
   });
   scored.sort((a,b)=>a.rank-b.rank || a.tie-b.tie);
@@ -196,7 +207,7 @@ function route(){
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-setup').textContent=DIR?'✓':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':'iCloud folder not linked yet';
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-setup').textContent=DIR?'✓':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
   if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
@@ -335,7 +346,7 @@ function renderBuild(){
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   const rows=q.map((x,i)=>`<div class="prow" title="${esc(x.p.prompt||'')}"><span class="num">${String(i+1).padStart(2,'0')}</span>
       <div style="flex:1"><div class="ttl">${esc(x.p.subtitle)}</div><div style="font-size:12.5px;color:var(--mute)">${esc((TOPICS.find(t=>t.id===x.p.topic_id)||{}).name||'')}</div></div>
-      <div class="why"><span class="chip ${esc(x.p.tier||'core')}">${TIER_LABEL[x.p.tier]||'core'}</span><span class="chip">${esc(x.p.kind||'drill')}</span><span class="chip ${x.why==='weak'?'weak':x.why==='due'?'due':'new'}">${x.why}</span></div>
+      <div class="why"><span class="chip ${esc(x.p.tier||'core')}">${TIER_LABEL[x.p.tier]||'core'}</span><span class="chip">${esc(x.p.kind||'drill')}</span><span class="chip ${x.why==='weak'?'weak':x.why==='due'?'due':x.why==='in batch'?'inbatch':x.why==='review'?'review':'new'}">${x.why}</span></div>
     </div>`).join('') || `<p style="color:var(--mute)">Nothing matches these filters — widen the tiers or kinds.</p>`;
   $('main').innerHTML=`<div class="kicker">Build a batch</div><h1 style="margin:4px 0 6px">Next best problems</h1>
     <p style="color:var(--mute);margin:0 0 18px">Ranked automatically: <b>weak spots</b> first, then problems <b>due for review</b>, then <b>new</b> ones in path order. Adjust and export.</p>
@@ -351,7 +362,7 @@ function renderBuild(){
     <div class="plist">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
       <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
-      ${DIR?'':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
+      ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
     </div><div id="exp-msg" class="msg"></div>`;
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
@@ -388,8 +399,8 @@ function renderSetup(){
     <div class="card"><h2 style="margin-bottom:14px">One-time setup</h2>
       <div class="steps">
         <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
-        <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center"><button class="btn sm" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--red)'}">${DIR?'✓ linked: '+esc(DIR.name):'not linked'}</span></div>
-          <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader.</div></div></div>
+        <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':DIR_PENDING?'var(--amber)':'var(--red)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'not linked'}</span></div>
+          <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
       </div>
@@ -400,15 +411,23 @@ window.linkFolder=linkFolder;
 /* ---------- folder ---------- */
 async function restoreDir(){
   try{ const h=await idb.get('dir'); if(!h) return;
-    if(await h.queryPermission({mode:'readwrite'})==='granted') DIR=h;
+    const st=await h.queryPermission({mode:'readwrite'});
+    if(st==='granted') DIR=h; else if(st==='prompt') DIR_PENDING=h; // Chrome forgets the grant per session: one click re-arms it
   }catch(e){}
 }
+/* must run inside a user gesture (click) — requestPermission is refused otherwise */
+async function reconnectDir(){
+  if(!DIR_PENDING) return false;
+  try{ if(await DIR_PENDING.requestPermission({mode:'readwrite'})==='granted'){ DIR=DIR_PENDING; DIR_PENDING=null; return true; } }catch(e){}
+  return false;
+}
+window.reconnectDir=async()=>{ if(await reconnectDir()){ toast('Folder reconnected.'); route(); } else toast('Could not reconnect — use Link folder to pick it again.', 5000); };
 async function linkFolder(){
   if(DEMO){ toast('Demo mode — folder linking disabled.'); return; }
   if(!window.showDirectoryPicker){ toast('This browser cannot link folders — use Chrome or Edge.', 5000); return; }
   try{
     const h=await window.showDirectoryPicker({mode:'readwrite'});
-    for(const n of ['outbox','solved','graded']) await h.getDirectoryHandle(n,{create:true});
+    for(const n of ['outbox','solved','graded','grader']) await h.getDirectoryHandle(n,{create:true});
     await writeText(h, 'COWORK_TASK.md', coworkTask());
     await idb.set('dir', h); DIR=h;
     toast('Folder linked. outbox/, solved/, graded/ created; COWORK_TASK.md written.');
@@ -438,19 +457,27 @@ async function exportBatchNow(q, m){
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');
   const fname=`WT_${topicSlug}_${stamp}.pdf`;
   const batchId=(crypto.randomUUID&&crypto.randomUUID())||String(now.getTime());
+  if(!DIR&&DIR_PENDING) await reconnectDir(); // still inside the click's user activation
   const blob=makePdf(q, fname, batchId);
-  const manifest=JSON.stringify({batch_id:batchId, user_id:DEMO?'demo':SESSION.user.id, created_at:now.toISOString(), filename:fname,
-    problems:q.map(x=>({id:x.p.id, topic_id:x.p.topic_id, number:x.p.number, subtitle:x.p.subtitle, prompt:x.p.prompt, given_data:x.p.given_data||null, answer:x.p.answer||null, worked:x.p.worked||null, tier:x.p.tier, kind:x.p.kind, picked_because:x.why}))}, null, 2);
-  let dest='downloaded';
+  const jname=fname.replace(/\.pdf$/,'.json');
+  const prob=x=>({id:x.p.id, topic_id:x.p.topic_id, number:x.p.number, subtitle:x.p.subtitle, prompt:x.p.prompt, given_data:x.p.given_data||null, tier:x.p.tier, kind:x.p.kind, picked_because:x.why});
+  const head={batch_id:batchId, user_id:DEMO?'demo':SESSION.user.id, created_at:now.toISOString(), filename:fname};
+  // outbox/ syncs to the iPad next to the sheet, so it never carries answers; grader/ holds the full key
+  const manifest=JSON.stringify({...head, problems:q.map(prob)}, null, 2);
+  const key=JSON.stringify({...head, problems:q.map(x=>({...prob(x), answer:x.p.answer||null, worked:x.p.worked||null}))}, null, 2);
+  let dest='downloaded', written=false;
   if(DIR){
     try{
       const out=await DIR.getDirectoryHandle('outbox',{create:true});
       const fh=await out.getFileHandle(fname,{create:true});
       const w=await fh.createWritable(); await w.write(blob); await w.close();
-      await writeText(out, fname.replace(/\.pdf$/,'.json'), manifest);
-      dest='outbox/ (syncing to iPad)';
-    }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); download(blob, fname); }
-  } else download(blob, fname);
+      await writeText(out, jname, manifest);
+      const gr=await DIR.getDirectoryHandle('grader',{create:true});
+      await writeText(gr, jname, key);
+      dest='outbox/ (syncing to iPad)'; written=true;
+    }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
+  }
+  if(!written){ download(blob, fname); download(new Blob([key],{type:'application/json'}), jname); dest='downloaded (PDF + manifest — the grader needs both)'; }
   if(!DEMO){
     const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
     if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
@@ -513,12 +540,13 @@ function coworkTask(){
 You are my study grader. This folder is the exchange point between my Learning Hub app, my iPad, and you.
 
 ## Folder layout
-- outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename)
+- outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename, no answers — this folder syncs to the iPad)
+- grader/  — the full manifest for each batch, including reference answers. READ ANSWERS FROM HERE.
 - solved/  — PDFs I solved by hand on the iPad (Markup annotations). NEW FILES HERE = YOUR TRIGGER.
 - graded/  — where you move PDFs after grading
 
 ## When a new PDF appears in solved/
-1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the matching manifest in outbox/ (same basename as the original export) for prompts, given data and reference answers.
+1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the matching manifest in grader/ (same basename as the original export) for prompts, given data and reference answers.
 2. Grade each problem from my handwriting: is the method sound, is the final answer right, where exactly did I slip. Be specific and reference my actual steps.
 3. For each problem, insert one row into Supabase (service role key is at ~/.config/writtentest/service_role_key — read it, never copy it into this folder):
 
