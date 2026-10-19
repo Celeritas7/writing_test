@@ -236,6 +236,23 @@ async function ghDraftRestore(){
   return true;
 }
 window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
+/* ---- session log: one entry per saved sheet, local to this device, so Review
+   can show Japanese-database sheets (they never enter written_test_attempts)
+   and offer a retry sheet built from the wrong ones. */
+const GH_LOG_KEY='gh-sessions';
+window.ghSessions=()=>{ try{ return JSON.parse(localStorage.getItem(GH_LOG_KEY)||'[]'); }catch(e){ return []; } };
+function ghLogSession(){
+  const items=GH.items.map(p=>({id:p.id, prompt:p.prompt, answer:p.answer, kanji:p.kanji||null, rev:!!p.rev, mean:!!p.mean, subtitle:p.subtitle||'', topic_id:p.topic_id, m:GH.marks[p.id]||0}));
+  const label=GH.ext?GH.ext.label:((TOPICS.find(t=>t.id===GH.topic)||{}).name||'Ghost test');
+  const list=ghSessions(); list.unshift({ts:Date.now(), label, src:GH.ext?(GH.ext.src||'jp'):'hub', topic:GH.topic, n:items.length, right:items.filter(i=>i.m===1).length, items});
+  try{ localStorage.setItem(GH_LOG_KEY, JSON.stringify(list.slice(0,40))); }catch(e){}
+}
+window.ghRetrySession=i=>{
+  const s=ghSessions()[i]; if(!s) return;
+  const wrong=s.items.filter(x=>x.m!==1), pick=wrong.length?wrong:s.items;
+  GH.ext={label:'Retry · '+s.label, src:s.src, items:pick.map((x,k)=>({...x, number:k+1, unit_no:k+1, src:s.src==='jp'?'jp':undefined}))};
+  ghFresh(); location.hash='ghost'; renderGhost();
+};
 window.ghMark=(e,id)=>{
   e.stopPropagation();
   if(GH.brush) return ghSetMark(id, GH.brush);
@@ -661,14 +678,15 @@ async function ghSaveNow(){
   if(GH.locked) return;
   const unmarked=GH.items.length-rows.length;
   if(unmarked&&!confirm(unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked and will not be saved.\n\nSave the '+rows.length+' marked one'+(rows.length===1?'':'s')+' anyway? (Cancel to go back and mark the rest, or use Rest ✓.)')) return;
-  if(!DEMO&&!GH.ext){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
-  if(!GH.ext) ATTEMPTS=rows.concat(ATTEMPTS);
+  const hub=!GH.ext||GH.ext.src==='hub';
+  if(!DEMO&&hub){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
+  if(hub) ATTEMPTS=rows.concat(ATTEMPTS);
   let extra='', plan=null;
   const c=ghCfg();
   const logTable=(GH_PANEL&&$('jp-log')?$('jp-log').value.trim():c.log);
   const jpKeyNow=(typeof JP!=='undefined'&&JP.key)||c.key;
   const jpUrlNow=(typeof JP!=='undefined'&&JP.url)||c.url;
-  if(GH.ext&&!DEMO&&jpUrlNow&&jpKeyNow){
+  if(!hub&&!DEMO&&jpUrlNow&&jpKeyNow){
     const today=ghDay();
     const log=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
       return {user_id:c.user||ghWho(), kanji:p.kanji||p.prompt, direction:ghDirOf(p), test_type:c.type||'ghost', test_date:today, is_correct:m===1, rating:m===1?5:m===2?3:1, seconds:ghSeconds(p.id)}; })
@@ -709,9 +727,10 @@ async function ghSaveNow(){
       }catch(e2){ extra+=' — NOT SAVED.'; }
       if(!logged){ toast('Save failed'+extra+' — your sheet is kept; check the connection and press Save results again.', 8000); return; }
     }
-  } else if(GH.ext&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
+  } else if(!hub&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
   ghDraftClear(); // the results are in the database now; nothing left to resume
+  if(!DEMO) ghLogSession();
   const end=ghEnding(plan);
   if(!end){ ghExit(); return; }
   GH.locked=true; $('gh-sheet').classList.add('locked'); ghDrawer(true);

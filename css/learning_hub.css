@@ -92,6 +92,12 @@ label .hint{text-transform:none;letter-spacing:0;font-family:"IBM Plex Sans",san
 .fb .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
 .fb .head b{white-space:nowrap}
 .fb .notes{font-size:13.5px;color:var(--soft);margin-top:6px}
+.fb .acts,.bopen .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.fb .jpw{display:inline-block;margin-right:8px;font-size:15px}.fb .jpw small{font-size:10px;color:var(--mute);margin-left:2px}
+.revbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.brow{cursor:pointer}.brow:hover td,.brow:focus-visible td{background:#faf9f5}.brow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bopen td{background:#faf9f5;padding:6px 16px 12px}
+.blist{list-style:none;padding:0;margin:4px 0 0;display:grid;gap:4px}.blist li{display:flex;justify-content:space-between;gap:8px;font-size:13px}
 .stars{font-size:15px;letter-spacing:1px;color:#8a6212}
 .steps{counter-reset:s;display:flex;flex-direction:column;gap:14px}
 .step{display:flex;gap:14px;align-items:flex-start}

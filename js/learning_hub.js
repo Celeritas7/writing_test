@@ -321,7 +321,7 @@ function renderTopic(tid){
     <h1 style="margin-top:8px">${esc(t.name)}</h1>
     <div class="stat-row" style="margin-top:8px"><span class="chip">${st.attempted}/${st.total} attempted</span>${st.weak?`<span class="chip weak">${st.weak} weak</span>`:''}${st.due?`<span class="chip due">${st.due} due</span>`:''}</div>
     <p style="color:var(--mute);margin:6px 0 14px">${esc(t.tagline||'')} The list below is the learning path in order — statuses update automatically as Cowork grades your work.</p>
-    <div style="margin-bottom:14px;display:flex;gap:10px"><button class="btn" onclick="buildSel.topic='${esc(tid)}';location.hash='build'">Build a batch from this topic</button><button class="btn ghost" onclick="toggleForm('pf-new')">＋ Add problem</button></div>
+    <div style="margin-bottom:14px;display:flex;gap:10px"><button class="btn" onclick="practise('${esc(tid)}')">Build a batch from this topic</button><button class="btn ghost" onclick="toggleForm('pf-new')">＋ Add problem</button></div>
     <form id="pf-new" class="card hide" style="margin-bottom:14px" onsubmit="return addProblem(event,'${esc(tid)}')">
       <div class="formrow" style="margin-top:0">
         <div style="flex:1;min-width:200px"><label>Title</label><input name="subtitle" required style="width:100%" placeholder="e.g. Chain rule"></div>
@@ -369,23 +369,78 @@ function renderBuild(){
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
 
+/* ---------- review ----------
+   Cowork feedback stays one card per problem. Ghost sheets collapse to one card
+   per session (same topic, same minute) and Japanese-database sheets come from
+   the device's local session log, since they never enter written_test_attempts. */
+let REV={topic:'all', wrong:false, batch:'all', limit:30, open:null};
+window.REV=REV;
+const fmtDate=d=>{ const x=new Date(d); return isNaN(x)?'—':x.toLocaleDateString(); };
+function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?(t.subject_id||(SUBJECTS[0]||{}).id):null; }
+/* Build view pre-filtered to one topic: weak problems rank first, so a wrong answer lands at the top */
+window.practise=tid=>{ buildSel.topic=tid; buildSel.subject=topicSubject(tid)||'all'; location.hash='build'; if(location.hash==='#build') renderBuild(); };
+window.setBatchStatus=async(id,status)=>{
+  const b=BATCHES.find(x=>x.id===id); if(!b) return;
+  if(!DEMO){ const {error}=await sb.from('written_test_batches').update({status}).eq('id',id); if(error){ toast('Could not update batch: '+error.message,5000); return; } }
+  b.status=status; toast('Batch marked '+status+'.'); renderReview();
+};
 function renderReview(){
-  const bRows=BATCHES.map(b=>`<tr><td class="mono" style="font-size:12px">${esc(b.filename)}</td><td>${esc((TOPICS.find(t=>t.id===b.topic_id)||{}).name||'mixed')}</td><td>${(b.problem_ids||[]).length}</td><td><span class="chip status-${esc(b.status)}">${esc(b.status)}</span></td><td style="color:var(--mute)">${new Date(b.created_at).toLocaleDateString()}</td></tr>`).join('');
-  const fb=ATTEMPTS.slice(0,30).map(a=>{
-    const p=PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id};
-    const t=TOPICS.find(x=>x.id===a.topic_id)||{};
-    return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" onclick="location.hash='topic/${esc(a.topic_id||'')}'" title="Open ${esc(t.name||'topic')}">
-      <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span>
-        <span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>
-        ${a.rating?`<span class="stars" title="Rating ${rating5(a.rating)} of 5" aria-label="Rating ${rating5(a.rating)} of 5">${'★'.repeat(rating5(a.rating))}${'☆'.repeat(5-rating5(a.rating))}</span>`:''}
-        <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${new Date(a.graded_at).toLocaleDateString()}</span></div>
-      ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
-    </div>`;
-  }).join('') || `<p style="color:var(--mute)">No feedback yet. Export a batch, solve it on your iPad, drop it in <span class="mono">solved/</span> — Cowork's feedback lands here.</p>`;
+  const topicName=id=>(TOPICS.find(t=>t.id===id)||{}).name||'';
+  const latest=latestByProblem();
+  const stars=r=>r?`<span class="stars" title="Rating ${rating5(r)} of 5" aria-label="Rating ${rating5(r)} of 5">${'★'.repeat(rating5(r))}${'☆'.repeat(5-rating5(r))}</span>`:'';
+  const bRows=BATCHES.map(b=>{
+    const open=REV.open===b.id;
+    const probs=(b.problem_ids||[]).map(id=>{ const p=PROBLEMS.find(x=>x.id===id)||{subtitle:id}; const s=pstatus(p,latest);
+      return `<li><span>${esc(p.subtitle)}</span><span class="chip ${s.code==='weak'?'weak':s.code==='due'?'due':s.code==='ok'?'ok':'new'}">${esc(s.label)}</span></li>`; }).join('');
+    const next=b.status==='exported'?['solved','Mark solved']:b.status==='solved'?['graded','Mark graded']:null;
+    return `<tr class="brow" tabindex="0" role="button" aria-expanded="${open}" onclick="REV.open=REV.open==='${esc(b.id)}'?null:'${esc(b.id)}';renderReview()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
+      <td class="mono" style="font-size:12px">${esc(b.filename)}</td><td>${esc(topicName(b.topic_id)||'mixed')}</td><td>${(b.problem_ids||[]).length}</td><td><span class="chip status-${esc(b.status)}">${esc(b.status)}</span></td><td style="color:var(--mute)">${fmtDate(b.created_at)}</td></tr>
+      ${open?`<tr class="bopen"><td colspan="5"><ul class="blist">${probs||'<li style="color:var(--mute)">No problems recorded for this batch.</li>'}</ul>
+        <div class="acts">${next?`<button class="btn sm ghost" onclick="event.stopPropagation();setBatchStatus('${esc(b.id)}','${next[0]}')">${next[1]}</button>`:''}<button class="btn sm ghost" onclick="event.stopPropagation();REV.batch='${esc(b.id)}';REV.open=null;renderReview()">Show its feedback</button></div></td></tr>`:''}`;
+  }).join('');
+  // ---- feedback entries
+  let list=ATTEMPTS.filter(a=>(REV.topic==='all'||a.topic_id===REV.topic)&&(!REV.wrong||!a.correct));
+  if(REV.batch!=='all'){ const b=BATCHES.find(x=>x.id===REV.batch); const ids=new Set(b?b.problem_ids:[]); list=list.filter(a=>ids.has(a.problem_id)); }
+  const entries=[], groups={};
+  for(const a of list){
+    if(a.graded_by==='ghost'){ const k=a.topic_id+'|'+String(a.graded_at).slice(0,16); if(!groups[k]){ groups[k]={kind:'ghost', topic_id:a.topic_id, graded_at:a.graded_at, items:[]}; entries.push(groups[k]); } groups[k].items.push(a); }
+    else entries.push({kind:'fb', a, graded_at:a.graded_at});
+  }
+  if(REV.batch==='all'&&REV.topic==='all'&&typeof ghSessions==='function')
+    ghSessions().forEach((s,i)=>{ if(s.src==='jp'&&(!REV.wrong||s.right<s.n)) entries.push({kind:'jp', s, i, graded_at:new Date(s.ts).toISOString()}); });
+  entries.sort((x,y)=>new Date(y.graded_at)-new Date(x.graded_at));
+  const shown=entries.slice(0,REV.limit);
+  const fb=shown.map(e=>{
+    if(e.kind==='fb'){ const a=e.a, p=PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}, t=TOPICS.find(x=>x.id===a.topic_id)||{};
+      return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" onclick="location.hash='topic/${esc(a.topic_id||'')}'" title="Open ${esc(t.name||'topic')}">
+        <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${stars(a.rating)}
+          <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${fmtDate(a.graded_at)}</span></div>
+        ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
+        ${a.correct?'':`<div class="acts"><button class="btn sm ghost" onclick="event.stopPropagation();practise('${esc(a.topic_id)}')">Practise again</button></div>`}</div>`; }
+    if(e.kind==='ghost'){ const n=e.items.length, right=e.items.filter(a=>a.correct).length, wrong=e.items.filter(a=>!a.correct);
+      const names=wrong.map(a=>esc((PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}).subtitle)).join(' · ');
+      return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}" onclick="ghPick('${esc(e.topic_id)}');location.hash='ghost'" title="Open this sheet in the ghost test">
+        <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>
+          <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">ghost · ${fmtDate(e.graded_at)}</span></div>
+        <div class="notes">${wrong.length?'To review: '+names:'Every word right.'}</div></div>`; }
+    const s=e.s, wrong=s.items.filter(x=>x.m!==1);
+    return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}">
+      <div class="head"><b>Ghost sheet · ${esc(s.label)}</b><span class="chip">Japanese database</span><span class="chip ${wrong.length?'due':'ok'}">${s.right} / ${s.n}</span>
+        <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">ghost · ${fmtDate(e.graded_at)}</span></div>
+      <div class="notes">${wrong.length?'To review: '+wrong.map(x=>`<span class="jpw">${esc(x.kanji||x.prompt)}<small>${x.rev?'書':'読'}</small></span>`).join(' '):'Every word right.'}</div>
+      ${wrong.length?`<div class="acts"><button class="btn sm ghost" onclick="ghRetrySession(${e.i})">Retry the ${wrong.length} wrong</button></div>`:''}</div>`;
+  }).join('') || `<p style="color:var(--mute)">${entries.length||ATTEMPTS.length?'Nothing matches these filters.':'No feedback yet. Export a batch, solve it on your iPad, drop it in <span class="mono">solved/</span> — Cowork\'s feedback lands here.'}</p>`;
+  // ---- filter bar
+  const tids=[...new Set(ATTEMPTS.map(a=>a.topic_id).filter(Boolean))];
+  const tPills=[['all','All topics'],...tids.map(id=>[id,topicName(id)||id])].map(([id,name])=>`<button class="pill-t ${REV.topic===id?'on':''}" aria-pressed="${REV.topic===id}" onclick="REV.topic='${esc(id)}';REV.limit=30;renderReview()">${esc(name)}</button>`).join('');
+  const bsel=REV.batch!=='all'?`<button class="pill-t on" onclick="REV.batch='all';renderReview()" title="Clear batch filter">batch: ${esc((BATCHES.find(x=>x.id===REV.batch)||{}).filename||'?')} ✕</button>`:'';
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
-    <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch.</p>
+    <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
-    <h2 style="margin:0 0 4px">Feedback</h2>${fb}`;
+    <h2 style="margin:0 0 8px">Feedback</h2>
+    <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
+    ${fb}
+    ${entries.length>REV.limit?`<div style="display:flex;align-items:center;gap:12px;margin-top:12px"><button class="btn sm ghost" onclick="REV.limit+=30;renderReview()">Load more</button><span style="font-size:12.5px;color:var(--mute)">Showing ${shown.length} of ${entries.length}</span></div>`:''}`;
 }
 
 function renderSetup(){
