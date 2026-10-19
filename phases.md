@@ -1,7 +1,7 @@
 # Ghost test — build phases
 
 One phase per pass. Each ships a working app you can use before the next starts.
-Files: `writing_test/ghost_test.js`, `writing_test/learning_hub.html`, `japanese_user_reviews`.
+Files: `js/ghost_test.js`, `js/japanese_source.js`, `index.html`, `japanese_user_reviews`.
 
 ---
 
@@ -11,7 +11,7 @@ Files: `writing_test/ghost_test.js`, `writing_test/learning_hub.html`, `japanese
 - **Clear marks** with a confirm; handwriting untouched.
 - Marking controls moved to their own bar — fixed to the bottom under 820px.
 
-Delivered as `handoff/ghost_test.js` + `handoff/ghost-mark-bar.css`.
+Delivered in `js/ghost_test.js` + `css/learning_hub.css` (§7 ghost).
 
 ---
 
@@ -56,8 +56,8 @@ Worked example (step 3 → 4 days going in):
 
 ---
 
-## Phase 3 — endings
-- **Full marks (20/20):** the flower blooms centre-screen over a scrim, solid oxblood, ~2.9s, and blocks the sheet — the test is over, Exit only. Petals meet at the centre, uneven, non-overlapping (geometry is in `templates/ghost-test-20/GhostTest20.dc.html`).
+## Phase 3 — endings ✅ built
+- **Full marks (20/20):** the flower blooms centre-screen over a scrim, solid oxblood, ~2.9s, and blocks the sheet — the test is over, Exit only. Petals meet at the centre, uneven, non-overlapping (geometry is in `ghost-test-20-standalone.html`).
 - **18–19 of 20:** a small check, no flower.
 - **Anything less:** the wrong ones listed with their next review dates, no mark at all.
 
@@ -65,7 +65,7 @@ Worked example (step 3 → 4 days going in):
 
 ---
 
-## Phase 4 — mobile dashboard
+## Phase 4 — mobile dashboard ✅ built (Home route)
 Phone-width first, in this order:
 1. Due-today count + Start button.
 2. Streak and accuracy.
@@ -76,8 +76,8 @@ Phone-width first, in this order:
 ---
 
 ## Phase 5 — optional
-- Port the template's **4×5 box grid** (per-box grid/baseline paper, ghost under faded ink) into the app, replacing the 5-column list layout.
-- Standalone export of `templates/ghost-test-20/` to run from `writing_test/`.
+- ✅ Box-grid paper is in (toggle **Boxes**). Remaining: port the template's **4×5 box grid** (per-box grid/baseline paper, ghost under faded ink) into the app, replacing the 5-column list layout.
+- Standalone export: `ghost-test-20-standalone.html` at the repo root.
 
 ---
 

@@ -6,11 +6,13 @@ Each phase is one loop:
 2. **Design review** — the Claude design skills look at the result (`/design:design-critique` for the screens, `/design:accessibility-review` where noted, `/design:ux-copy` for wording) and return a list of changes.
 3. **Rework** — Claude Code applies the review, re-screenshots, pushes. Then the phase is merged.
 
-Phases are ordered so each one leaves a working app. Item numbers (A1, B5 …) refer to `deep-review.md`.
+Phases are ordered so each one leaves a working app.
+
+**Status (2026-10-19):** all nine phases are built on branch `ccr-4abfed3a-grkuod`, one commit each ("Phase N: …"). The design-review step has not run yet for any phase; each phase's "Design review checks" list is the brief for it. Item numbers (A1, B5 …) refer to `deep-review.md`.
 
 ---
 
-## Phase 1 — Stop the breakage (small, mechanical)
+## Phase 1 — Stop the breakage — ✅ built, awaiting design review (small, mechanical)
 Items: A1, A2, A7, A8, A9, A10, A14, A19, B19.
 
 **Claude Code builds**
@@ -30,7 +32,7 @@ Items: A1, A2, A7, A8, A9, A10, A14, A19, B19.
 
 ---
 
-## Phase 2 — Make the loop reliable
+## Phase 2 — Make the loop reliable — ✅ built, awaiting design review
 Items: A5, A6, A11, A12, A15, B2, B4.
 
 **Claude Code builds**
@@ -49,7 +51,7 @@ Items: A5, A6, A11, A12, A15, B2, B4.
 
 ---
 
-## Phase 3 — PDF that prints everything
+## Phase 3 — PDF that prints everything — ✅ built, awaiting design review
 Items: A3, A4, B18, and the `given_data` wrap bug.
 
 **Claude Code builds**
@@ -65,7 +67,7 @@ Items: A3, A4, B18, and the `given_data` wrap bug.
 
 ---
 
-## Phase 4 — Ghost test writing feel
+## Phase 4 — Ghost test writing feel — ✅ built, awaiting design review
 Items: B1, B6, B7, B8, B9, B15, B16, B20, B22, A17, A18.
 
 **Claude Code builds**
@@ -86,7 +88,7 @@ Items: B1, B6, B7, B8, B9, B15, B16, B20, B22, A17, A18.
 
 ---
 
-## Phase 5 — Dates, streak, identity
+## Phase 5 — Dates, streak, identity — ✅ built, awaiting design review
 Items: A13, B10, B11, B12, A16.
 
 **Claude Code builds**
@@ -103,7 +105,7 @@ Items: A13, B10, B11, B12, A16.
 
 ---
 
-## Phase 6 — Review and results
+## Phase 6 — Review and results — ✅ built, awaiting design review
 Items: B5, D4, D5, B17.
 
 **Claude Code builds**
@@ -120,7 +122,7 @@ Items: B5, D4, D5, B17.
 
 ---
 
-## Phase 7 — Dashboard (phases.md Phase 4)
+## Phase 7 — Dashboard (phases.md Phase 4) — ✅ built, awaiting design review
 Items: D6, D7.
 
 **Claude Code builds**
@@ -135,7 +137,7 @@ Items: D6, D7.
 
 ---
 
-## Phase 8 — Accessibility and content editing
+## Phase 8 — Accessibility and content editing — ✅ built, awaiting design review
 Items: C1–C7, D1, D2, B13, B14.
 
 **Claude Code builds**
@@ -150,7 +152,7 @@ Items: C1–C7, D1, D2, B13, B14.
 
 ---
 
-## Phase 9 — Clean-up
+## Phase 9 — Clean-up — ✅ built, awaiting design review
 Items: E-section, dead code.
 
 - Remove the legacy import panel, `Temp/` folders and `js/Temp/`; fix README and `phases.md` paths; add `sql/` to the repo or document where it lives.

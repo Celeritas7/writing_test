@@ -97,103 +97,15 @@ function ghDayPlus(days){ const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.
 function jpUser(){ return ((ghCfg().user||'')+'').trim(); }
 function jpUserQ(){ const u=jpUser(); return u?'user_id=eq.'+encodeURIComponent(u)+'&':''; }
 
-let GH_PANEL=false, GH_PREVIEW=null, GH_TABLES=null;
+let GH_PANEL=false;
 function ghWho(){ return (SESSION&&SESSION.user&&(SESSION.user.email||SESSION.user.id))||'ghost'; }
-window.ghListTables=async()=>{
-  const c=ghCfg(), url=($('jp-url').value.trim()||c.url).replace(/\/$/,''), key=$('jp-key').value.trim()||c.key;
-  if(!url||!key){ toast('Enter the project URL and anon key first.'); return; }
-  ghCfgField('url',url); ghCfgField('key',key);
-  try{
-    const r=await fetch(url+'/rest/v1/',{headers:{apikey:key,Authorization:'Bearer '+key}});
-    const spec=await r.json();
-    const all=Object.keys(spec.definitions||spec.components&&spec.components.schemas||{});
-    GH_TABLES=all.filter(t=>/^japanese_/.test(t)).sort();
-    if(!GH_TABLES.length){ GH_TABLES=all.sort(); }
-    if(!GH_TABLES.length) throw new Error('No tables visible to the anon key — check RLS policies.');
-    if(!GH_TABLES.includes(ghCfg().table)) ghCfgField('table', GH_TABLES[0]);
-    toast(GH_TABLES.length+' tables found.');
-  }catch(e){ GH_PREVIEW={err:'Could not list tables: '+(e.message||e)}; }
-  renderGhost();
-};
 const ghCfg=()=>{ let c={}; try{ c=JSON.parse(localStorage.getItem('wt_jp_source')||'{}'); }catch(e){}
   const set={}; for(const k in c) if(c[k]!=null&&String(c[k]).trim()!=='') set[k]=c[k];
   return Object.assign({}, JP_DEFAULTS, {url:JP_URL, key:JP_ANON_KEY, user:JP_USER_ID}, set); };
 const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
-window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; GH_PREVIEW=null; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
+window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
-function ghPanelHtml(){
-  if(!GH_PANEL) return '';
-  if(window.jpPanelHtml) return window.jpPanelHtml();
-  const c=ghCfg();
-  const prev=GH_PREVIEW ? (GH_PREVIEW.err
-    ? `<p class="msg err" style="margin-top:10px">${esc(GH_PREVIEW.err)}</p>`
-    : `<div style="margin-top:12px"><div class="kicker">${GH_PREVIEW.rows.length} rows · columns: ${GH_PREVIEW.cols.map(esc).join(', ')}</div>
-       <div style="margin-top:8px;font-size:14px;line-height:1.7">${GH_PREVIEW.rows.slice(0,6).map(r=>`${esc(r.q)} — <span style="color:#c0392b">${esc(r.a)}</span>`).join('<br>')}</div>
-       <button class="btn sm" style="margin-top:12px" onclick="ghImportRun()">Import ${GH_PREVIEW.rows.length} items into this hub</button></div>`) : '';
-  return `<div class="card" style="margin-bottom:16px;max-width:760px">
-    <h3 style="margin-bottom:4px">Japanese database</h3>
-    <p style="color:var(--mute);font-size:13px;margin:0 0 12px">Pull words from your other Supabase project. They are copied into this hub as problems, so ghost results and batch ranking work on one history.</p>
-    <div class="formrow" style="margin-top:0">
-      <div style="flex:1;min-width:240px"><label>Project URL</label><input id="jp-url" style="width:100%" placeholder="https://xxxx.supabase.co" value="${esc(c.url||'')}"></div>
-      <div style="flex:1;min-width:240px"><label>Anon key</label><input id="jp-key" style="width:100%" placeholder="eyJhbGciOi…" value="${esc(c.key||'')}"></div>
-    </div>
-    <div class="formrow">
-      <div><label>Table</label>${GH_TABLES?`<select id="jp-table" onchange="ghCfgField('table',this.value)" style="min-width:230px">${GH_TABLES.map(t=>`<option ${c.table===t?'selected':''}>${esc(t)}</option>`).join('')}</select>`:`<input id="jp-table" placeholder="japanese_words" value="${esc(c.table||'')}">`}</div>
-      <div><label>Word column</label><input id="jp-q" placeholder="kanji" value="${esc(c.q||'')}" style="width:130px"></div>
-      <div><label>Reading column</label><input id="jp-a" placeholder="hiragana" value="${esc(c.a||'')}" style="width:150px"></div>
-      <div><label>Limit</label><input id="jp-n" type="number" min="1" max="200" value="${c.n||20}" style="width:80px"></div>
-      <button class="btn sm ghost" onclick="ghListTables()">List tables</button>
-      <button class="btn sm ghost" onclick="ghImportFetch()">Fetch preview</button>
-    </div>
-    <p style="color:var(--mute);font-size:12.5px;margin:10px 0 0">Leave the column names blank to let the app guess them from the first row.</p>
-    <div class="formrow">
-      <div><label>Write results back to</label><input id="jp-log" oninput="ghCfgField('log',this.value)" placeholder="japanese_daily_test_log" value="${esc(c.log==null?'japanese_daily_test_log':c.log)}" style="width:230px"></div>
-      <div><label>user_id to stamp</label><input id="jp-user" oninput="ghCfgField('user',this.value)" placeholder="${esc(ghWho())} (from your login)" value="${esc(c.user||'')}" style="width:200px"></div>
-      <div><label>test_type</label><input id="jp-type" oninput="ghCfgField('type',this.value)" placeholder="ghost" value="${esc(c.type||'ghost')}" style="width:110px"></div>
-    </div>
-    <p style="color:var(--mute);font-size:12.5px;margin:8px 0 0">Ghost results are written to that table (kanji · is_correct · rating · test_date) so your Japanese app sees them, and mirrored into this hub for batch ranking. Clear the table name to skip the write-back.</p>
-    ${prev}</div>`;
-}
-window.ghImportFetch=async()=>{
-  const c={url:$('jp-url').value.trim().replace(/\/$/,''), key:$('jp-key').value.trim(), table:$('jp-table').value.trim(), q:$('jp-q').value.trim(), a:$('jp-a').value.trim(), n:parseInt($('jp-n').value)||20, log:$('jp-log').value.trim(), user:$('jp-user').value.trim(), type:$('jp-type').value.trim()||'ghost'};
-  if(!c.url||!c.key||!c.table){ toast('URL, anon key and table are required.'); return; }
-  ghCfgSet(c);
-  try{
-    const r=await fetch(`${c.url}/rest/v1/${encodeURIComponent(c.table)}?select=*&limit=${c.n}`,{headers:{apikey:c.key, Authorization:'Bearer '+c.key}});
-    const body=await r.json();
-    if(!r.ok) throw new Error(body.message||body.hint||('HTTP '+r.status));
-    if(!Array.isArray(body)||!body.length) throw new Error('That table returned no rows.');
-    const cols=Object.keys(body[0]);
-    const guess=(want,fb)=>cols.find(k=>want.test(k))||fb;
-    const qc=c.q||guess(/kanji|word|term|front|question|expression/i, cols[1]||cols[0]);
-    const ac=c.a||guess(/hiragana|kana|reading|yomi|answer|back|meaning/i, cols[2]||cols[1]);
-    GH_PREVIEW={cols, qc, ac, rows:body.filter(x=>x[qc]&&x[ac]).map(x=>({q:String(x[qc]), a:String(x[ac])}))};
-    if(!GH_PREVIEW.rows.length) throw new Error(`No usable pairs from columns “${qc}” / “${ac}” — name them explicitly above.`);
-  }catch(e){ GH_PREVIEW={err:String(e.message||e)}; }
-  renderGhost();
-};
-window.ghImportRun=async()=>{
-  if(!GH_PREVIEW||!GH_PREVIEW.rows) return;
-  const c=ghCfg();
-  let sub=SUBJECTS.find(s=>GH_LANG.test(s.name));
-  if(!sub){ sub={id:'language_study', name:'Language Study', sort_no:(SUBJECTS.length||0)+1};
-    if(!DEMO){ const {error}=await sb.from('written_test_subjects').insert(sub); if(error){ toast('Could not create subject: '+error.message,6000); return; } }
-    SUBJECTS.push(sub); }
-  const tid='jp_'+slug(c.table||'words');
-  let topic=TOPICS.find(t=>t.id===tid);
-  if(!topic){ topic={id:tid, subject_id:sub.id, name:'Japanese · '+(c.table||'words'), branch_no:(TOPICS.length||0)+1, accent:'#c0392b'};
-    if(!DEMO){ const {error}=await sb.from('written_test_topics').insert(topic); if(error){ toast('Could not create topic: '+error.message,6000); return; } }
-    TOPICS.push(topic); }
-  const base=PROBLEMS.filter(p=>p.topic_id===tid).length;
-  const have=new Set(PROBLEMS.filter(p=>p.topic_id===tid).map(p=>p.prompt));
-  const fresh=GH_PREVIEW.rows.filter(r=>!have.has(r.q));
-  if(!fresh.length){ toast('Those words are already imported.'); return; }
-  const rows=fresh.map((r,i)=>({id:tid+'-'+(base+i+1), topic_id:tid, number:base+i+1, unit_no:base+i+1, subtitle:'Read: '+r.q, prompt:r.q, answer:r.a, tier:'core', kind:'drill'}));
-  if(!DEMO){ const {error}=await sb.from('written_test_problems').insert(rows); if(error){ toast('Import failed: '+error.message,6000); return; } }
-  PROBLEMS.push(...rows);
-  toast(rows.length+' words imported.');
-  GH_PANEL=false; GH_PREVIEW=null; GH.topic=tid; GH.marks={}; GH.strokes=[]; renderGhost();
-};
+function ghPanelHtml(){ return GH_PANEL&&window.jpPanelHtml ? window.jpPanelHtml() : ''; }
 window.ghSeed=async()=>{
   const KJ=[['生える','はえる'],['六人','ろくにん'],['歩く','あるく'],['先々月','せんせんげつ'],['七人','しちにん'],['一年','いちねん'],['小学校','しょうがっこう'],['少女','しょうじょ'],['千本','せんぼん'],['あの方','あのかた'],['五万円','ごまんえん'],['先週','せんしゅう'],['上手(な)','じょうず'],['休み','やすみ'],['時間','じかん'],['のぼり','上り'],['げんき','元気'],['ちいさい','小さい'],['てま','手間'],['つぶら','円ら']];
   let sub=SUBJECTS.find(s=>GH_LANG.test(s.name));
