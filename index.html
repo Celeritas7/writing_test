@@ -2,14 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Learning Hub</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f4f2ec">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Learning Hub">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/learning_hub.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 <div id="gate" class="gate-wrap">
@@ -38,15 +46,17 @@
     <a class="nav-item" href="#build" data-nav="build"><span class="lbl">Build<span class="long"> a batch</span></span> <span class="cnt" id="cnt-due"></span></a>
     <a class="nav-item" href="#review" data-nav="review">Review <span class="cnt" id="cnt-fb"></span></a>
     <a class="nav-item" href="#ghost" data-nav="ghost"><span class="lbl">Ghost<span class="long"> test</span></span></a>
-    <a class="nav-item" href="#setup" data-nav="setup">Setup <span class="cnt" id="cnt-setup"></span></a>
+    <a class="nav-item" href="#setup" data-nav="setup">Settings <span class="cnt" id="cnt-setup"></span></a>
     <div class="foot"><div id="who" class="mono" style="font-size:11px;overflow-wrap:anywhere"></div></div>
   </aside>
   <main class="main" id="main"></main>
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="ask" class="ask" aria-labelledby="ask-t" aria-describedby="ask-b"><form method="dialog"><h2 id="ask-t"></h2><div id="ask-b"></div><input id="ask-in" class="hide" autocomplete="off"><div class="ask-acts"><button value="cancel" class="btn sm ghost" id="ask-no"></button><button value="alt" class="btn sm ghost hide" id="ask-alt"></button><button value="ok" class="btn sm" id="ask-ok"></button></div></form></dialog>
 <script>if(!window.supabase||!window.jspdf){document.getElementById("gate-msg").className="msg err";document.getElementById("gate-msg").textContent="A library failed to load from the CDN. Check your connection and reload.";}</script>
 <script src="js/learning_hub.js"></script>
+<script>if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
 <script src="js/ghost_test.js"></script>
 <script src="js/japanese_source.js"></script>
 </body>

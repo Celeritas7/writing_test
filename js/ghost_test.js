@@ -306,10 +306,10 @@ window.ghRestPass=()=>{
   toast(n ? n+' unmarked '+(n===1?'item':'items')+' marked ✓' : 'Every item is already marked', 2200);
 };
 /* wipe every mark, with a warning. Ink is untouched. */
-window.ghClearMarks=()=>{
+window.ghClearMarks=async()=>{
   const n=Object.keys(GH.marks).filter(k=>GH.marks[k]).length;
   if(!n) return toast('No markings to clear', 1800);
-  if(!confirm('Clear all '+n+' markings on this sheet?\n\nYour handwriting stays. This cannot be undone.')) return;
+  if(!await ask({title:'Clear all '+n+' marks?', body:"<p>Your handwriting stays. This can't be undone.</p>", ok:'Clear marks', cancel:'Keep marks', danger:true})) return;
   GH.marks={}; ghDraftSave();
   renderGhost();
   toast('All markings cleared', 2000);
@@ -504,7 +504,7 @@ function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.lef
 window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
 window.ghUndo=()=>{ GH.strokes.pop(); ghRedraw(); ghDraftSave(); };
-window.ghClear=()=>{ if(GH.strokes.length&&!confirm('Erase all handwriting on this sheet?\n\nYour marks stay. This cannot be undone.')) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
+window.ghClear=async()=>{ if(GH.strokes.length&&!await ask({title:'Erase all handwriting?', body:"<p>Your marks stay. This can't be undone.</p>", ok:'Erase ink', cancel:'Keep ink', danger:true})) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
 window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-on',GH.ghost); document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost)); };
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
@@ -598,7 +598,11 @@ async function ghSaveNow(){
   if(!rows.length){ toast('Mark at least one item first.'); return; }
   if(GH.locked) return;
   const unmarked=GH.items.length-rows.length;
-  if(unmarked&&!confirm(unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked and will not be saved.\n\nSave the '+rows.length+' marked one'+(rows.length===1?'':'s')+' anyway? (Cancel to go back and mark the rest, or use Rest ✓.)')) return;
+  if(unmarked){
+    const a=await ask({title:unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked', body:'<p>Unmarked items are not saved. Mark the rest ✓, save only the '+rows.length+' you marked, or go back.</p>', ok:'Mark rest ✓ and save', alt:'Save '+rows.length+' only', cancel:'Go back'});
+    if(!a) return;
+    if(a===true){ ghRestPass(); return ghSaveNow(); }
+  }
   const hub=!GH.ext||GH.ext.src==='hub';
   if(!DEMO&&hub){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
   if(hub) ATTEMPTS=rows.concat(ATTEMPTS);

@@ -9,7 +9,7 @@
 
 /* ---- 2 · base type ------------------------------------------------- */
 *{box-sizing:border-box}html,body{margin:0}
-body{font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.55;color:var(--ink);background:var(--bg)}
+body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.55;color:var(--ink);background:var(--bg)}
 h1,h2,h3{font-family:"Space Grotesk",sans-serif;letter-spacing:-0.3px;margin:0}
 h1{font-size:26px;font-weight:700}h2{font-size:19px;font-weight:600}h3{font-size:15px;font-weight:600}
 a{color:var(--accent)}a:hover{color:#184e39}
@@ -102,6 +102,14 @@ textarea{font:inherit;font-size:13.5px;border:1px solid var(--line);border-radiu
 .tile .sub{font-size:13px;color:var(--soft)}
 .tile .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 a.btn{text-decoration:none}
+/* in-page dialog (ask) */
+.ask{border:none;border-radius:14px;padding:20px 22px;max-width:min(440px,calc(100vw - 32px));box-shadow:0 18px 50px rgba(20,30,25,.25);color:var(--ink);background:var(--card)}
+.ask::backdrop{background:rgba(22,36,29,.35)}
+.ask h2{margin:0 0 6px;font-size:18px}
+.ask p{margin:0 0 14px;color:var(--soft);font-size:14px;line-height:1.45}
+.ask input{width:100%;box-sizing:border-box;margin:0 0 14px}
+.ask-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.btn.btn-danger{background:var(--red);border-color:var(--red);color:#fff}
 a.topic-card{display:block;color:inherit;text-decoration:none}
 .topic-card:focus-visible,.subj-head:focus-visible,.fb:focus-visible,.gh-n:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tile .marks{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 12px;font-size:14px}
@@ -112,6 +120,7 @@ a.topic-card{display:block;color:inherit;text-decoration:none}
 .fb:hover{border-color:#c8c2b2}
 .fb .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
 .fb .head b{white-space:nowrap}
+@media (max-width:560px){.fb .head>.mono{flex-basis:100%;margin-left:0!important}.wide-only{display:none}}
 .fb .notes{font-size:13.5px;color:var(--soft);margin-top:6px}
 .fb .acts,.bopen .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
 .fb .jpw{display:inline-block;margin-right:8px;font-size:15px}.fb .jpw small{font-size:10px;color:var(--mute);margin-left:2px}
@@ -239,7 +248,7 @@ body.gh-full .gh-grid{flex:1 1 auto;min-height:0;grid-template-columns:repeat(5,
 body.gh-full .gh-sheet{overflow-y:auto}
 body.gh-full .gh-rule{display:none}
 body.gh-full .gh-item{padding:4px 0 8px}
-body.gh-full h1,body.gh-full .main>.kicker,body.gh-full .gh-top,body.gh-full .main>p,body.gh-full .pillbar,body.gh-full .gh-hd .s,body.gh-full .gh-inst{display:none}
+body.gh-full h1,body.gh-full .main>.kicker,body.gh-full .gh-top,body.gh-full .main>p,body.gh-full .pillbar,body.gh-full .gh-hd .s,body.gh-full .gh-hd .nm,body.gh-full .gh-inst{display:none}
 body.gh-full .gh-exit{display:inline-flex!important}
 @media (max-width:900px){body.gh-full .gh-grid{grid-template-columns:repeat(4,1fr)}}
 /* phones: 20 items cannot fit one screen at a usable size, so fullscreen keeps
@@ -361,13 +370,17 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .nav-item,body.nav-collapsed .side .nav-item{display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 0;min-height:52px;font-size:11px;border-radius:10px}
   .nav-item::before,body.nav-collapsed .nav-item::before{content:attr(data-icon);font-size:18px;line-height:1}
   body.nav-collapsed .nav-item .lbl{display:inline}
+  .nav-item{position:relative}
   .nav-item .cnt,.nav-item .long{display:none}
+  /* badges: the Home due count, and a dot on Settings while the folder needs linking */
+  .nav-item #cnt-home:not(:empty){display:block;position:absolute;top:3px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font:600 10px/16px "IBM Plex Mono",monospace;text-align:center;margin:0}
+  .nav-item #cnt-setup[data-warn=true]{display:block;position:absolute;top:5px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:var(--amber);font-size:0;margin:0}
   .toast{left:12px;right:12px;bottom:calc(var(--tabbar) + 12px);max-width:none;text-align:center}
   .main{padding:18px 16px}
   .grid2{grid-template-columns:1fr 1fr}
   h1{font-size:22px}
   .subj-head{padding:10px 12px;gap:8px;flex-wrap:wrap}.subj-head h2{font-size:16px}.subj-head .kicker{order:5;flex-basis:100%;font-size:10px}
-  .prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:100%}
+  .prow{flex-wrap:wrap}.prow .why{margin-left:36px;width:calc(100% - 36px);flex-wrap:wrap;min-width:0}.prow .rowtools{margin-left:auto}
   .flow .arr{display:none}.flow{gap:8px}
 }
 /* 8b · phones: two columns, 88px of writing room per word, free scrolling,

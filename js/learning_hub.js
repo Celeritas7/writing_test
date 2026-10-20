@@ -37,6 +37,30 @@ function a11yPass(root){
   for(const b of root.querySelectorAll('.pill-t:not([aria-pressed])')) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
 }
 new MutationObserver(()=>a11yPass($('main'))).observe($('main'),{childList:true,subtree:true});
+/* In-page replacement for confirm()/prompt(): the buttons say what they do,
+   Esc and the backdrop cancel, focus is trapped while it is open (native
+   <dialog>), and it reads the same on every browser.
+   Resolves true/false, 'alt' for the optional third button, or the typed
+   text (null on cancel) when `input` is given. */
+function ask({title, body='', ok='OK', cancel='Cancel', alt=null, danger=false, input=null}){
+  const d=$('ask'), inp=$('ask-in');
+  $('ask-t').textContent=title; $('ask-b').innerHTML=body;
+  $('ask-ok').textContent=ok; $('ask-no').textContent=cancel;
+  $('ask-ok').className='btn sm'+(danger?' btn-danger':'');
+  $('ask-alt').classList.toggle('hide',!alt); if(alt) $('ask-alt').textContent=alt;
+  inp.classList.toggle('hide', input==null); inp.value=input==null?'':input;
+  return new Promise(res=>{
+    const done=()=>{ d.removeEventListener('close',done); const v=d.returnValue;
+      res(input!=null ? (v==='ok'?inp.value:null) : v==='ok'?true : v==='alt'?'alt' : false); };
+    d.addEventListener('close',done);
+    d.returnValue='cancel';
+    d.onclick=e=>{ if(e.target===d) d.close('cancel'); };
+    inp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); d.close('ok'); } };
+    d.showModal();
+    (input!=null?inp:(danger?$('ask-no'):$('ask-ok'))).focus();
+  });
+}
+window.ask=ask;
 function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms); }
 
 /* ---------- sidebar collapse ----------------------------------------
@@ -84,6 +108,19 @@ $('send-link').addEventListener('click', async ()=>{
     : 'Check your inbox for the magic link, then return here.';
 });
 $('email').addEventListener('keydown', e=>{ if(e.key==='Enter') $('send-link').click(); });
+/* install prompt (Chrome/Edge/Android); iOS installs from the Share sheet */
+let INSTALL_EVT=null; const STANDALONE=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+let INSTALLED=false; addEventListener('appinstalled',()=>{ INSTALLED=true; INSTALL_EVT=null; if(location.hash==='#setup') route(); });
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_EVT=e; if(location.hash==='#setup') route(); });
+window.installApp=async()=>{
+  const ev=INSTALL_EVT; if(!ev) return;
+  INSTALL_EVT=null;                               // the event is single-use whatever happens next
+  try{ await ev.prompt(); const c=await ev.userChoice; if(c&&c.outcome==='accepted') INSTALLED=true; }catch(e){}
+  if(location.hash==='#setup') route();
+};
+/* who is signed in, for the sidebar foot and the Account card */
+const whoText=()=>DEMO?'demo mode — nothing is saved':((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
 window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
@@ -131,7 +168,7 @@ window.boot=boot;
 async function boot(){
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
   $('main').innerHTML='<p style="color:var(--mute);margin-top:20px">Loading…</p>';
-  $('who').textContent = DEMO ? 'demo mode — nothing is saved' : ((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
+  $('who').textContent = whoText();
   if(!DEMO){
     const [t,p,a,b,s] = await Promise.all([
       sb.from('written_test_topics').select('*').order('branch_no'),
@@ -225,7 +262,7 @@ function route(){
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-home').setAttribute('aria-hidden','true'); $('cnt-setup').setAttribute('aria-hidden','true'); $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); document.querySelector('.nav-item[data-nav=home]').setAttribute('aria-label', dueN?'Home, '+dueN+' due':'Home'); document.querySelector('.nav-item[data-nav=setup]').setAttribute('aria-label', !DIR&&!DEMO?'Settings, iCloud folder not linked':'Settings'); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
   if(page==='home') renderHome();
   else if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
@@ -264,7 +301,7 @@ function renderLibrary(){
         <h2>${esc(s.name)}</h2>
         <span class="kicker">${topics.length} topic${topics.length===1?'':'s'} · ${attempted}/${total} attempted</span>${flags}
         ${s.orphan?`<span class="kicker" style="margin-left:auto;color:var(--amber)">subject missing — open a topic to move it</span>`:`<span class="rowtools" style="margin-left:auto" onclick="event.stopPropagation()"><button title="Rename subject" aria-label="Rename ${esc(s.name)}" onclick="renameSubject('${esc(s.id)}')">✎</button><button title="Delete subject" aria-label="Delete ${esc(s.name)}" class="danger" onclick="deleteSubject('${esc(s.id)}')" ${topics.length?'disabled':''}>🗑</button></span>
-        <button class="btn ghost sm" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')">＋ Topic</button>`}
+        <button class="btn ghost sm" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')" aria-label="Add a topic to ${esc(s.name)}">＋<span class="wide-only"> Topic</span></button>`}
         <span class="chev">▸</span>
       </div>
       <div class="${open?'':'hide'}" style="padding:12px 2px 6px">
@@ -387,7 +424,7 @@ window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
 window.deleteProblem=async id=>{
   const p=PROBLEMS.find(x=>x.id===id); if(!p) return;
   const n=ATTEMPTS.filter(a=>a.problem_id===id).length;
-  if(!confirm(`Delete “${p.subtitle}”?${n?`\n\nIts ${n} graded attempt${n===1?'':'s'} stay in Review but will show the id instead of the title.`:''}\n\nThis cannot be undone.`)) return;
+  if(!await ask({title:`Delete “${p.subtitle}”?`, body:`<p>${n?`Its ${n} graded attempt${n===1?' stays':'s stay'} in Review, labelled by id instead of title. `:''}This can't be undone.</p>`, ok:'Delete problem', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_problems',id)){ PROBLEMS=PROBLEMS.filter(x=>x.id!==id); toast('Problem deleted.'); route(); }
 };
 window.moveProblem=async(id,dir)=>{
@@ -405,17 +442,17 @@ window.saveTopic=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
   return false; }); return false; };
 window.deleteTopic=async id=>{
   const t=TOPICS.find(x=>x.id===id); if(!t||PROBLEMS.some(p=>p.topic_id===id)) return;
-  if(!confirm(`Delete the topic “${t.name}”? This cannot be undone.`)) return;
+  if(!await ask({title:`Delete the topic “${t.name}”?`, body:"<p>It has no problems left. This can't be undone.</p>", ok:'Delete topic', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_topics',id)){ TOPICS=TOPICS.filter(x=>x.id!==id); toast('Topic deleted.'); location.hash='library'; }
 };
 window.renameSubject=async id=>{
   const s=SUBJECTS.find(x=>x.id===id); if(!s) return;
-  const name=prompt('Subject name', s.name); if(name==null) return; const nm=name.trim(); if(!nm||nm===s.name) return;
+  const name=await ask({title:'Rename subject', body:'<p>Topics and problems stay where they are.</p>', ok:'Rename', input:s.name}); if(name==null) return; const nm=name.trim(); if(!nm||nm===s.name) return;
   if(await dbUpdate('written_test_subjects',id,{name:nm})){ s.name=nm; toast('Subject renamed.'); route(); }
 };
 window.deleteSubject=async id=>{
   const s=SUBJECTS.find(x=>x.id===id); if(!s||TOPICS.some(t=>subjectOf(t)===id)) return;
-  if(!confirm(`Delete the subject “${s.name}”?`)) return;
+  if(!await ask({title:`Delete the subject “${s.name}”?`, body:"<p>It has no topics left. This can't be undone.</p>", ok:'Delete subject', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_subjects',id)){ SUBJECTS=SUBJECTS.filter(x=>x.id!==id); OPEN_SUBS=null; toast('Subject deleted.'); route(); }
 };
 
@@ -579,7 +616,17 @@ function renderReview(){
 }
 
 function renderSetup(){
-  $('main').innerHTML=`<div class="kicker">Setup</div><h1 style="margin:4px 0 6px">The loop</h1>
+  $('main').innerHTML=`<div class="kicker">Settings</div><h1 style="margin:4px 0 14px">Settings</h1>
+    <div class="card account" style="margin:4px 0 18px">
+      <h2 style="margin:0 0 4px">Account</h2>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
+        ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
+      </div>
+      ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
+    </div>
+    <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
       <div class="node"><b>Build & export</b><span>PDF + manifest → outbox/</span></div><div class="arr">→</div>
       <div class="node"><b>iCloud syncs</b><span>folder appears on iPad</span></div><div class="arr">→</div>
@@ -596,11 +643,7 @@ function renderSetup(){
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
       </div>
     </div>
-    <div class="card account" style="margin-top:16px">
-      <h2 style="margin:0 0 4px">Account</h2>
-      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(SESSION.user.email||SESSION.user.id)+'</b>'+(ROLE?' · '+esc(ROLE):'')}</p>
-      <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
-    </div>`;
+`;
 }
 window.linkFolder=linkFolder;
 

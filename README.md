@@ -6,23 +6,24 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 
 ## Run it
 - **Hosted:** open the deployed `index.html` in Chrome or Edge and sign in (Google, or an email link). "Explore with sample data" shows the whole app without touching your data.
+- **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
 ## One-time setup
 1. **Supabase** — run `sql/schema.sql` in the SQL editor of your project (the `sql/` folder is git-ignored; keep it locally). It creates `written_test_subjects / topics / problems / attempts / batches` and the write policies the app needs.
 2. **Keys** — `js/learning_hub.js` holds the project URL and anon key; `js/ghost_test.js` holds the Japanese project's URL, anon key and your user id (defaults — Connection settings in the Ghost test override them).
-3. **iCloud folder** — create `iCloud Drive/WrittenTest`, then **Setup → Link folder** in the app. It creates `outbox/ solved/ graded/ grader/` and writes `COWORK_TASK.md`. After a reload Chrome asks for one click to reconnect; Setup and Build offer it.
+3. **iCloud folder** — create `iCloud Drive/WrittenTest`, then **Settings → Link folder** in the app. It creates `outbox/ solved/ graded/ grader/` and writes `COWORK_TASK.md`. After a reload Chrome asks for one click to reconnect; Settings and Build offer it.
 4. **Cowork** — point Claude Cowork at `COWORK_TASK.md` and keep the Supabase service-role key at `~/.config/writtentest/service_role_key` (never inside the synced folder). Reference answers are in `grader/`, never in `outbox/`.
 
 ## Screens
 | Screen | What it does |
 |---|---|
-| **Home** | Due today + Start, streak, 7-day accuracy, last sheet's marks. Phones open here. |
+| **Home** | Due today + Start, streak, 7-day accuracy, last sheet's marks. Phones open here; the Home tab shows the due count as a badge. |
 | **Library** | Subjects → topics → problems. Add, rename, reorder, edit, delete. Multi-line prompts. |
 | **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF (+ manifest) to `outbox/`, or downloads both. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
 | **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
 | **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
-| **Setup** | The loop, folder link / reconnect, grader instructions, and **Account** (who is signed in, Sign out). |
+| **Settings** | **Account** first (who is signed in, Sign out, Install app), then the loop, folder link / reconnect and grader instructions. |
 
 On phones the sections are a bottom tab bar; on wider screens they are the left sidebar.
 
@@ -34,10 +35,13 @@ On phones the sections are a bottom tab bar; on wider screens they are the left 
 ```
 index.html                 shell: sign-in gate, sidebar, #main, toast
 css/learning_hub.css       all styles (responsive rules in §8)
-js/learning_hub.js         auth, data, Home / Library / Build / Review / Setup, PDF export
+js/learning_hub.js         auth, data, Home / Library / Build / Review / Settings, PDF export
 js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log
 js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
 fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
+manifest.webmanifest       install metadata (name, colours, icons)
+sw.js                      service worker: offline app shell, never caches Supabase data
+icons/                     app icons (筆 on the app green)
 worksheets/*.html          standalone practice sheets
 ghost-test-20-standalone.html  self-contained ghost test
 dev-phases.md              development plan and status
