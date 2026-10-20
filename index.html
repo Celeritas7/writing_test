@@ -45,6 +45,7 @@
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<dialog id="ask" class="ask" aria-labelledby="ask-t" aria-describedby="ask-b"><form method="dialog"><h2 id="ask-t"></h2><div id="ask-b"></div><input id="ask-in" class="hide" autocomplete="off"><div class="ask-acts"><button value="cancel" class="btn sm ghost" id="ask-no"></button><button value="alt" class="btn sm ghost hide" id="ask-alt"></button><button value="ok" class="btn sm" id="ask-ok"></button></div></form></dialog>
 <script>if(!window.supabase||!window.jspdf){document.getElementById("gate-msg").className="msg err";document.getElementById("gate-msg").textContent="A library failed to load from the CDN. Check your connection and reload.";}</script>
 <script src="js/learning_hub.js"></script>
 <script src="js/ghost_test.js"></script>

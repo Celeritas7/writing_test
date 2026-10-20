@@ -37,6 +37,30 @@ function a11yPass(root){
   for(const b of root.querySelectorAll('.pill-t:not([aria-pressed])')) b.setAttribute('aria-pressed', String(b.classList.contains('on')));
 }
 new MutationObserver(()=>a11yPass($('main'))).observe($('main'),{childList:true,subtree:true});
+/* In-page replacement for confirm()/prompt(): the buttons say what they do,
+   Esc and the backdrop cancel, focus is trapped while it is open (native
+   <dialog>), and it reads the same on every browser.
+   Resolves true/false, 'alt' for the optional third button, or the typed
+   text (null on cancel) when `input` is given. */
+function ask({title, body='', ok='OK', cancel='Cancel', alt=null, danger=false, input=null}){
+  const d=$('ask'), inp=$('ask-in');
+  $('ask-t').textContent=title; $('ask-b').innerHTML=body;
+  $('ask-ok').textContent=ok; $('ask-no').textContent=cancel;
+  $('ask-ok').className='btn sm'+(danger?' btn-danger':'');
+  $('ask-alt').classList.toggle('hide',!alt); if(alt) $('ask-alt').textContent=alt;
+  inp.classList.toggle('hide', input==null); inp.value=input==null?'':input;
+  return new Promise(res=>{
+    const done=()=>{ d.removeEventListener('close',done); const v=d.returnValue;
+      res(input!=null ? (v==='ok'?inp.value:null) : v==='ok'?true : v==='alt'?'alt' : false); };
+    d.addEventListener('close',done);
+    d.returnValue='cancel';
+    d.onclick=e=>{ if(e.target===d) d.close('cancel'); };
+    inp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); d.close('ok'); } };
+    d.showModal();
+    (input!=null?inp:(danger?$('ask-no'):$('ask-ok'))).focus();
+  });
+}
+window.ask=ask;
 function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms); }
 
 /* ---------- sidebar collapse ----------------------------------------
@@ -387,7 +411,7 @@ window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
 window.deleteProblem=async id=>{
   const p=PROBLEMS.find(x=>x.id===id); if(!p) return;
   const n=ATTEMPTS.filter(a=>a.problem_id===id).length;
-  if(!confirm(`Delete “${p.subtitle}”?${n?`\n\nIts ${n} graded attempt${n===1?'':'s'} stay in Review but will show the id instead of the title.`:''}\n\nThis cannot be undone.`)) return;
+  if(!await ask({title:`Delete “${p.subtitle}”?`, body:`<p>${n?`Its ${n} graded attempt${n===1?' stays':'s stay'} in Review, labelled by id instead of title. `:''}This can't be undone.</p>`, ok:'Delete problem', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_problems',id)){ PROBLEMS=PROBLEMS.filter(x=>x.id!==id); toast('Problem deleted.'); route(); }
 };
 window.moveProblem=async(id,dir)=>{
@@ -405,17 +429,17 @@ window.saveTopic=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
   return false; }); return false; };
 window.deleteTopic=async id=>{
   const t=TOPICS.find(x=>x.id===id); if(!t||PROBLEMS.some(p=>p.topic_id===id)) return;
-  if(!confirm(`Delete the topic “${t.name}”? This cannot be undone.`)) return;
+  if(!await ask({title:`Delete the topic “${t.name}”?`, body:"<p>It has no problems left. This can't be undone.</p>", ok:'Delete topic', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_topics',id)){ TOPICS=TOPICS.filter(x=>x.id!==id); toast('Topic deleted.'); location.hash='library'; }
 };
 window.renameSubject=async id=>{
   const s=SUBJECTS.find(x=>x.id===id); if(!s) return;
-  const name=prompt('Subject name', s.name); if(name==null) return; const nm=name.trim(); if(!nm||nm===s.name) return;
+  const name=await ask({title:'Rename subject', body:'<p>Topics and problems stay where they are.</p>', ok:'Rename', input:s.name}); if(name==null) return; const nm=name.trim(); if(!nm||nm===s.name) return;
   if(await dbUpdate('written_test_subjects',id,{name:nm})){ s.name=nm; toast('Subject renamed.'); route(); }
 };
 window.deleteSubject=async id=>{
   const s=SUBJECTS.find(x=>x.id===id); if(!s||TOPICS.some(t=>subjectOf(t)===id)) return;
-  if(!confirm(`Delete the subject “${s.name}”?`)) return;
+  if(!await ask({title:`Delete the subject “${s.name}”?`, body:"<p>It has no topics left. This can't be undone.</p>", ok:'Delete subject', cancel:'Keep it', danger:true})) return;
   if(await dbDelete('written_test_subjects',id)){ SUBJECTS=SUBJECTS.filter(x=>x.id!==id); OPEN_SUBS=null; toast('Subject deleted.'); route(); }
 };
 
