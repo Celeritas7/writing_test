@@ -84,7 +84,7 @@ $('send-link').addEventListener('click', async ()=>{
     : 'Check your inbox for the magic link, then return here.';
 });
 $('email').addEventListener('keydown', e=>{ if(e.key==='Enter') $('send-link').click(); });
-$('signout').addEventListener('click', async e=>{ e.preventDefault(); if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; });
+window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
 /* returns the allowlist row, null if not listed, or {error} if unreadable */
@@ -125,7 +125,7 @@ sb.auth.getSession().then(({data})=>{ admit(data.session); });
 function loadError(msg){
   $('main').innerHTML=`<div class="card" style="max-width:560px;margin-top:20px"><h2 style="margin:0 0 8px">Couldn't load your data</h2>
     <p style="color:var(--soft);margin:0 0 14px">${esc(msg)}</p>
-    <button class="btn sm" onclick="boot()">Retry</button> <a href="#" onclick="document.getElementById('signout').click();return false" style="margin-left:12px;font-size:13px">Sign out</a></div>`;
+    <button class="btn sm" onclick="boot()">Retry</button> <a href="#" onclick="signOut();return false" style="margin-left:12px;font-size:13px">Sign out</a></div>`;
 }
 window.boot=boot;
 async function boot(){
@@ -595,6 +595,11 @@ function renderSetup(){
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
       </div>
+    </div>
+    <div class="card account" style="margin-top:16px">
+      <h2 style="margin:0 0 4px">Account</h2>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(SESSION.user.email||SESSION.user.id)+'</b>'+(ROLE?' · '+esc(ROLE):'')}</p>
+      <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
     </div>`;
 }
 window.linkFolder=linkFolder;
