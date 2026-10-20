@@ -9,7 +9,7 @@
 
 /* ---- 2 · base type ------------------------------------------------- */
 *{box-sizing:border-box}html,body{margin:0}
-body{font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.55;color:var(--ink);background:var(--bg)}
+body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);font-family:"IBM Plex Sans",sans-serif;font-size:15px;line-height:1.55;color:var(--ink);background:var(--bg)}
 h1,h2,h3{font-family:"Space Grotesk",sans-serif;letter-spacing:-0.3px;margin:0}
 h1{font-size:26px;font-weight:700}h2{font-size:19px;font-weight:600}h3{font-size:15px;font-weight:600}
 a{color:var(--accent)}a:hover{color:#184e39}

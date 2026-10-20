@@ -6,6 +6,7 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 
 ## Run it
 - **Hosted:** open the deployed `index.html` in Chrome or Edge and sign in (Google, or an email link). "Explore with sample data" shows the whole app without touching your data.
+- **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
 ## One-time setup
@@ -38,6 +39,9 @@ js/learning_hub.js         auth, data, Home / Library / Build / Review / Setup, 
 js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log
 js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
 fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
+manifest.webmanifest       install metadata (name, colours, icons)
+sw.js                      service worker: offline app shell, never caches Supabase data
+icons/                     app icons (筆 on the app green)
 worksheets/*.html          standalone practice sheets
 ghost-test-20-standalone.html  self-contained ghost test
 dev-phases.md              development plan and status
