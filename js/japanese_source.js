@@ -29,9 +29,9 @@ async function jpDirections(kanjis, force){
   if(JPS.dir==='r2k'){ for(const k of kanjis) out[k]='write'; return jpNoKataWrite(out); }
   try{
     const inList='('+kanjis.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
-    const {rows}=await jpGet(`japanese_user_reviews?kanji=in.${encodeURIComponent(inList)}&select=kanji,direction,next_review,last_rating&limit=5000`);
+    const {rows}=await jpGet(`japanese_user_reviews?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=kanji,direction,next_review,last_rating&limit=5000`);
     const by={}; for(const r of rows) (by[r.kanji]=by[r.kanji]||{})[r.direction||'read']=r;
-    const today=new Date().toISOString().slice(0,10);
+    const today=ghDay();
     for(const k of kanjis){
       if(force&&force[k]) continue;
       const rd=by[k]&&by[k].read, wr=by[k]&&by[k].write;
@@ -102,9 +102,9 @@ async function jpLoadTab(){
 window.jpLoadTab=jpLoadTab;
 window.jpStartSequence=async()=>{
   JPS.busy=true; JPS.err=null; renderGhost();
-  const today=new Date().toISOString().slice(0,10);
+  const today=ghDay();
   try{
-    const {rows:due}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji,direction,next_review&order=next_review.asc&limit=${JPS.n*2}`);
+    const {rows:due}=await jpGet(`japanese_user_reviews?${jpUserQ()}next_review=lte.${today}&select=kanji,direction,next_review&order=next_review.asc&limit=${JPS.n*2}`);
     const force={}; const seenK=[];
     for(const d of due){ if(!force[d.kanji]){ const dd=d.direction||'read'; if(dd==='write'&&!jpWritable(d.kanji)) continue; force[d.kanji]=dd; seenK.push(d.kanji); } }  // earliest due direction wins; a kanji once
     const dueK=seenK.slice(0,JPS.n);
@@ -117,7 +117,7 @@ window.jpStartSequence=async()=>{
     }
     const room=Math.min(JPS.n-words.length, JPS.newRate);
     if(room>0){
-      const {rows:seen}=await jpGet('japanese_user_reviews?select=kanji&limit=20000');
+      const {rows:seen}=await jpGet('japanese_user_reviews?'+jpUserQ()+'select=kanji&limit=20000');
       const known=new Set(seen.map(r=>r.kanji));
       const {total}=await jpGet('japanese_unified_words?select=id&limit=1', true);
       const off=Math.floor(Math.random()*Math.max(1,total-room*10));
@@ -129,15 +129,18 @@ window.jpStartSequence=async()=>{
   }catch(e){ JPS.err=String(e.message||e); JPS.busy=false; renderGhost(); }
 };
 async function jpDueCount(){
-  const today=new Date().toISOString().slice(0,10);
+  const today=ghDay();
   try{
-    const {total}=await jpGet(`japanese_user_reviews?next_review=lte.${today}&select=kanji&limit=1`, true);
+    const {total}=await jpGet(`japanese_user_reviews?${jpUserQ()}next_review=lte.${today}&select=kanji&limit=1`, true);
     JPS.dueCount=total;   // counts directions: a kanji due both ways counts twice
-    const {rows}=await jpGet('japanese_user_reviews?select=last_review&order=last_review.desc&limit=400');
-    const days=new Set(rows.map(r=>String(r.last_review||'').slice(0,10)).filter(Boolean));
+    const {rows}=await jpGet('japanese_user_reviews?'+jpUserQ()+'select=last_review,history&order=last_review.desc&limit=600');
+    // last_review is overwritten on every save, so a day whose words were all re-reviewed later would vanish;
+    // history[].d keeps every attempt date, so the streak is counted from that
+    const days=new Set();
+    for(const r of rows){ if(r.last_review) days.add(String(r.last_review).slice(0,10)); for(const h of (Array.isArray(r.history)?r.history:[])) if(h&&h.d) days.add(String(h.d).slice(0,10)); }
     let st=0, d=new Date();
-    if(!days.has(d.toISOString().slice(0,10))) d.setDate(d.getDate()-1);
-    while(days.has(d.toISOString().slice(0,10))){ st++; d.setDate(d.getDate()-1); }
+    if(!days.has(ghDay(d))) d.setDate(d.getDate()-1);
+    while(days.has(ghDay(d))){ st++; d.setDate(d.getDate()-1); }
     JPS.streak=st;
   }catch(e){}
 }
@@ -214,7 +217,7 @@ async function jpWords(path, label, order){
     const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
     const items=jpItems(usable, await jpDirections(usable.map(r=>r.kanji)));
     if(!items.length) throw new Error('No words with both kanji and reading in that set.');
-    GH.ext={label, items}; GH.marks={}; GH.strokes={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null;
+    GH.ext={label, items}; ghFresh(); GH_PANEL=false; JPS.err=null;
   }catch(e){ JPS.err=String(e.message||e); }
   JPS.busy=false; renderGhost();
 }
@@ -239,7 +242,7 @@ async function jpRanked(lv){
   const {rows:prog}=await jpGet(`japanese_unified_user_progress?${jpUserFilter()}select=word_id,marking,next_review_date,times_wrong,times_correct&limit=20000`);
   const seen=new Map(prog.filter(p=>pool.has(p.word_id)).map(p=>[p.word_id,p]));
   if(JPS.mode==='new') return [...pool].filter(id=>!seen.has(id)).slice(0,JPS.n);
-  const today=new Date().toISOString().slice(0,10);
+  const today=ghDay();
   let list=[...seen.values()];
   if(JPS.mode==='due') list=list.filter(p=>!p.next_review_date||p.next_review_date<=today);
   const rank=p=>jpRank(p);
@@ -265,7 +268,7 @@ async function jpRankIds(ids){
     const {rows:prog}=await jpGet(`japanese_unified_user_progress?${jpUserFilter()}word_id=in.(${ids.join(',')})&select=word_id,marking,next_review_date,times_wrong,times_correct&limit=5000`);
     const seen=new Map(prog.map(p=>[p.word_id,p]));
     if(JPS.mode==='new'){ const fresh=ids.filter(i=>!seen.has(i)); return (fresh.length?fresh:ids).slice(0,JPS.n); }
-    const today=new Date().toISOString().slice(0,10);
+    const today=ghDay();
     const sorted=[...ids].sort((a,b)=>{ const pa=seen.get(a),pb=seen.get(b);
       const s=p=>{ if(!p) return JPS.mode==='due'?9:5; if(JPS.mode==='due'&&p.next_review_date&&p.next_review_date>today) return 9; return jpRank(p); };
       return s(pa)-s(pb) || ((pb&&pb.times_wrong)||0)-((pa&&pa.times_wrong)||0); });
@@ -285,7 +288,7 @@ async function jpSetItems(rows, label, seq, force){
   const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
   if(!usable.length) throw new Error('No words with both kanji and reading in that set.');
   GH.ext={label, items:jpItems(usable, await jpDirections(usable.map(r=>r.kanji), force))};
-  GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.err=null; JPS.busy=false; renderGhost();
+  ghFresh(); GH_PANEL=false; JPS.err=null; JPS.busy=false; renderGhost();
 }
 /* 読 N · 書 M of total — two bars, complete only when both reach total */
 function jpDayChip(label, total, done){
@@ -323,7 +326,7 @@ async function jpCoverage(lv){
     const {rows:all}=await jpGet(`japanese_v_vocabulary_full?level=eq.${encodeURIComponent(lv)}&select=week_day_label,kanji&limit=20000`);
     const words={};
     for(const r of all){ (words[r.week_day_label]=words[r.week_day_label]||[]).push(r.kanji); }
-    const {rows:log}=await jpGet('japanese_user_reviews?select=kanji,direction&limit=20000');
+    const {rows:log}=await jpGet('japanese_user_reviews?'+jpUserQ()+'select=kanji,direction&limit=20000');
     const seen=new Set(), seenW=new Set();
     for(const r of log){ ((r.direction||'read')==='write'?seenW:seen).add(r.kanji); }
     for(const k of Object.keys(words)){
@@ -360,7 +363,7 @@ window.jpStartDay=async(lv,label)=>{
 };
 window.jpStartSmart=async()=>{
   JPS.busy=true; JPS.err=null; renderGhost();
-  const today=new Date().toISOString().slice(0,10);
+  const today=ghDay();
   try{
     let ids=[];
     if(JPS.mode==='random'){
@@ -387,7 +390,7 @@ window.jpStartSmart=async()=>{
       const fresh=jpUniq(rows.filter(r=>!seen.has(r.id)&&r.kanji&&r.hiragana)).slice(0,JPS.n);
       if(!fresh.length) throw new Error('No untested words in that slice — try again.');
       GH.ext={label:'Not yet tested · all levels', items:jpItems(fresh, await jpDirections(fresh.map(r=>r.kanji)))};
-      GH.marks={}; GH.strokes=[]; GH_PANEL=false; JPS.busy=false; renderGhost(); return;
+      ghFresh(); GH_PANEL=false; JPS.busy=false; renderGhost(); return;
     }
     await jpWords(`japanese_unified_words?id=in.(${ids.join(',')})&select=id,kanji,hiragana,meaning_en&limit=${JPS.n}`, (JP_MODES.find(m=>m[0]===JPS.mode)||[])[1]+' · all levels', ids);
   }catch(e){ JPS.err=String(e.message||e); JPS.busy=false; renderGhost(); }

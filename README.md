@@ -1,46 +1,45 @@
-# Written Test · Learning Hub v3
+# Learning Hub
 
-A complete learning loop: **build a batch → PDF lands in your iCloud folder → solve on iPad → Claude Cowork grades it → feedback in the app → next batch is smarter.**
+A personal study app: **build a batch of problems → the PDF lands in your iCloud folder → solve it by hand on the iPad → Claude Cowork grades it → feedback shows in the app → the next batch is smarter.** Plus a **Ghost test** for handwriting Japanese vocabulary with the Apple Pencil.
 
-## Deploy (10 minutes)
-1. **Supabase upgrade** — open Supabase → SQL Editor → paste the whole `schema.sql` → Run. Safe to re-run. It adds:
-   - `written_test_subjects` table (seeded: Maths, Language study, Mechanical) + `subject_id` on topics
-   - `tier` / `kind` / `unit_no` columns on `written_test_problems` (+ auto-tags your 30 existing problems)
-   - `written_test_batches` table for PDF tracking
-   - write policies so you can add subjects/topics/problems from inside the app
-   Nothing else on the Supabase side changes — same project, same keys, existing tables untouched.
-2. **Copy `learning_hub.html` + `learning_hub.js`** into your repo root next to `index.html`, commit, push. Your existing dashboard keeps working (shared `written_test_attempts` table).
-3. Open the deployed `learning_hub.html` in **Chrome/Edge**, sign in with your usual magic link.
-4. Create `iCloud Drive/WrittenTest` in Finder → in the app: **Setup → Link folder** → pick it. The app creates `outbox/ solved/ graded/` and writes `COWORK_TASK.md` (personalised with your user id).
-5. Save your Supabase **service role key** (Settings → API) to `~/.config/writtentest/service_role_key`. Never commit it, never put it in the synced folder.
-6. Point Claude Cowork at the folder's `COWORK_TASK.md` and tell it to watch `solved/`.
+Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 
-## Daily loop
-1. **Build a batch** — the queue auto-ranks: weak spots → due for review (spaced repetition off your ratings) → new problems in path order. Filter by tier/kind, export.
-2. PDF + manifest land in `outbox/`, iCloud syncs them to the iPad Files app.
-3. Solve with the Pencil (Markup), save the PDF into `solved/`.
-4. Cowork grades it, writes attempts + feedback straight to Supabase, marks the batch `graded`, archives the PDF.
-5. Open **Review** in the app — feedback is there, and the next batch re-ranks automatically. Your existing `index.html` dashboard keeps working (same `written_test_attempts` table).
+## Run it
+- **Hosted:** open the deployed `index.html` in Chrome or Edge and sign in (Google, or an email link). "Explore with sample data" shows the whole app without touching your data.
+- **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
-## Notes
-- Mobile: browsing, adding content, building batches and reading feedback all work; folder auto-save is desktop Chrome/Edge only (mobile exports download normally).
-- No folder linked? Export still works — the PDF just downloads.
-- Spaced repetition: rating 1–2 → due next day, 3 → 3 days, 4 → 7 days, 5 → 14 days.
-- "Explore with sample data" on the sign-in screen shows the whole app without touching your data.
+## One-time setup
+1. **Supabase** — run `sql/schema.sql` in the SQL editor of your project (the `sql/` folder is git-ignored; keep it locally). It creates `written_test_subjects / topics / problems / attempts / batches` and the write policies the app needs.
+2. **Keys** — `js/learning_hub.js` holds the project URL and anon key; `js/ghost_test.js` holds the Japanese project's URL, anon key and your user id (defaults — Connection settings in the Ghost test override them).
+3. **iCloud folder** — create `iCloud Drive/WrittenTest`, then **Setup → Link folder** in the app. It creates `outbox/ solved/ graded/ grader/` and writes `COWORK_TASK.md`. After a reload Chrome asks for one click to reconnect; Setup and Build offer it.
+4. **Cowork** — point Claude Cowork at `COWORK_TASK.md` and keep the Supabase service-role key at `~/.config/writtentest/service_role_key` (never inside the synced folder). Reference answers are in `grader/`, never in `outbox/`.
+
+## Screens
+| Screen | What it does |
+|---|---|
+| **Home** | Due today + Start, streak, 7-day accuracy, last sheet's marks. Phones open here. |
+| **Library** | Subjects → topics → problems. Add, rename, reorder, edit, delete. Multi-line prompts. |
+| **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF (+ manifest) to `outbox/`, or downloads both. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
+| **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
+| **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
+| **Setup** | The loop, folder link / reconnect, grader instructions. |
+
+## Spaced repetition
+- Hub problems: rating 1–2 → due next day, 3 → 3 days, 4 → 7 days, 5 → 14 days.
+- Ghost words: ladder 1 · 2 · 4 · 8 · 16 · 30 · 60 · 120 days; ✓ steps up, △ steps down, ✗ resets; a ✓ slower than 1.5× your own median for that word advances half a step. All dates are local calendar days.
 
 ## File layout
 ```
-learning_hub.html          49 lines — markup only: gate, shell, sidebar, #main, #toast
-css/learning_hub.css       all styles, 8 commented sections, every @media in §8
-js/learning_hub.js         app: auth, data, library / build / review / setup views
-js/ghost_test.js           ghost test: sheet, ink, marking, per-word clock, SRS ladder
-js/japanese_source.js      import from the second Supabase project (japanese_* tables)
-sql/schema.sql             run once in Supabase
-run-written-test-local.bat local server — serves the whole folder, subfolders included
+index.html                 shell: sign-in gate, sidebar, #main, toast
+css/learning_hub.css       all styles (responsive rules in §8)
+js/learning_hub.js         auth, data, Home / Library / Build / Review / Setup, PDF export
+js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log
+js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
+fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
+worksheets/*.html          standalone practice sheets
+ghost-test-20-standalone.html  self-contained ghost test
+dev-phases.md              development plan and status
+phases.md                  ghost-test design notes
+run-written-test-local.bat local server (Windows)
+sql/                       schema and policies — git-ignored, keep locally
 ```
-`learning_hub.html` and the `.bat` stay at the repo root next to `index.html`; the
-`css/`, `js/` and `sql/` folders go beside them. All paths in the HTML are already
-relative (`css/…`, `js/…`), so nothing to edit after copying.
-
-Your existing `index.html` is untouched and keeps loading whatever it loads today —
-if it also pulls `ghost_test.js`, repoint that one tag at `js/ghost_test.js`.
