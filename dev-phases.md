@@ -8,7 +8,53 @@ Each phase is one loop:
 
 Phases are ordered so each one leaves a working app.
 
-**Status (2026-10-19):** all nine phases are built on branch `ccr-4abfed3a-grkuod`, one commit each ("Phase N: …"). The design-review step has not run yet for any phase; each phase's "Design review checks" list is the brief for it. Item numbers (A1, B5 …) refer to `deep-review.md`.
+**Status (2026-10-19):** all nine phases are built on branch `ccr-4abfed3a-grkuod`, one commit each ("Phase N: …"). Design review round 1 (2026-10-20) ran with `/design:design-critique`, `/design:accessibility-review` and `/design:ux-copy` on screenshots of every screen at 1280px and 390px; its findings and fixes are in the section at the end. Round 2 should happen on a real iPad.
+
+---
+
+## Design review — round 1 (2026-10-20)
+
+Reviewed from screenshots of every screen (demo data) at 1280px and 390px. Severity: 🔴 blocks use · 🟡 hurts use · 🟢 polish. Everything marked **fixed** is in commit "Design review round 1".
+
+### Critique findings
+| # | Phase | Finding | Sev | Outcome |
+|---|---|---|---|---|
+| 1 | 4 | Box paper wrapped words mid-word ("生え / る") because the mark reserved width in the tab row | 🔴 | **fixed** — the mark now sits inside the number tab; the word keeps its line |
+| 2 | 2 | Setup on a phone: long monospace paths overflowed the card and were clipped | 🔴 | **fixed** — paths wrap anywhere on phones |
+| 3 | 6 | Review on a phone: the batch table clipped its Status column, the one that matters | 🟡 | **fixed** — Topic and Problems columns hide on phones; file name wraps |
+| 4 | 4 | Phone pen bar is cut off with no sign it scrolls | 🟡 | **fixed** — right-edge fade, same as the nav |
+| 5 | 4 | Toasts cover Save / Exit on phones | 🟡 | **fixed** — toasts sit above the drawer in the ghost view |
+| 6 | 2 | "not linked" in red reads as an error on first run | 🟡 | **fixed** — amber "Not linked yet" |
+| 7 | 4 | "◐ Ghost" does not say what it toggles | 🟡 | **fixed** — "◐ Show key" |
+| 8 | 7 | Home's secondary button "Ghost test" is a noun, not an action | 🟢 | **fixed** — "Write a sheet" |
+| 9 | 4 | Ending list showed "—" where a hub sheet has no next date | 🟢 | **fixed** — blank |
+| 10 | 8 | Library subject row on a phone wraps ✎ 🗑 + Topic ▸ onto two lines | 🟢 | open — acceptable; revisit with a real device |
+| 11 | 4 | Full screen on a laptop still shows the paper "名前 ____" name line | 🟢 | open — harmless |
+| 12 | 6 | Feedback card header wraps stars to a second line on phones | 🟢 | open — acceptable |
+
+### Accessibility audit (WCAG 2.1 AA)
+| # | Issue | Criterion | Sev | Outcome |
+|---|---|---|---|---|
+| 1 | Muted text (`--mute` #7a857e) was 3.4:1 on the page background — kickers, dates, hints | 1.4.3 | 🔴 | **fixed** — #636d67 (4.8:1 / 5.4:1 on cards) |
+| 2 | Amber chips: white on #b3811e was 3.3:1; warm-up chip text 3.2:1 | 1.4.3 | 🔴 | **fixed** — #8a6212 (5.5:1 / 5.0:1) |
+| 3 | Sidebar links were not inside a navigation landmark | 1.3.1 | 🟡 | **fixed** — `role="navigation"`, labelled |
+| 4 | Ink canvas had no accessible name | 1.1.1 | 🟡 | **fixed** — role img + label |
+| 5 | Focus ring relied on browser default; inconsistent across buttons, pills, inputs | 2.4.7 | 🟡 | **fixed** — one 2px accent ring on `:focus-visible` |
+| 6 | Browser `confirm()` dialogs cannot label their buttons ("OK/Cancel") | 3.3 | 🟢 | open — replace with an in-page dialog in a later phase |
+| 7 | Not verifiable from screenshots: VoiceOver on iPad, 200 % zoom | — | — | to test on device |
+
+Already in place from Phase 8a: keyboard reach for every click target, labels tied to fields, aria-pressed on toggles, live-region toast, 44px targets, AA-passing △.
+
+### UX copy
+| Element | Before | After |
+|---|---|---|
+| Ghost key toggle | ◐ Ghost | ◐ Show key |
+| Home secondary CTA | Ghost test | Write a sheet |
+| Setup folder state | not linked (red) | Not linked yet (amber) |
+| Rest ✓ | — | tooltip "Mark every unmarked item ✓" |
+
+Kept as is: "Build a batch", "Save results", "Practise again", "Retry the N wrong", "Couldn't load your data" + Retry, the unmarked-items confirm — all verb-first and specific.
+ Item numbers (A1, B5 …) refer to `deep-review.md`.
 
 ---
 

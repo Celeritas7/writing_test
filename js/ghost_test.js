@@ -42,7 +42,7 @@ function renderGhost(){
       <span class="gh-bar-sp"></span>
       <button class="btn sm ghost gh-t gh-boxes-b ${GH.boxes?'on':''}" onclick="ghBoxes()" title="Ruled boxes instead of plain lines (B)">▦ Boxes</button>
       <button class="btn sm ghost gh-t gh-paper-b ${GH.paper==='plain'?'on':''}" onclick="ghPaper()" title="Paper — blank white or warm graph paper">${GH.paper==='plain'?'□ Plain':'▤ Grid'}</button>
-      <button class="btn sm gh-t gh-ghost gh-ghost-top ${GH.ghost?'on':''}" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Ghost</button>
+      <button class="btn sm gh-t gh-ghost gh-ghost-top ${GH.ghost?'on':''}" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Show key</button>
       <button class="btn sm ghost gh-t gh-full-btn gh-full-top" onclick="ghFull()" title="Full screen (F)">⤢</button>
     </div>
     <div class="gh-work">
@@ -60,10 +60,10 @@ function renderGhost(){
       </div>
       <div class="gh-tally"><div class="gh-tbar"><i class="t1" id="gh-t1"></i><i class="t2" id="gh-t2"></i><i class="t3" id="gh-t3"></i></div><div class="gh-tcnt"><span id="gh-cnt2">0 / ${GH.items.length} marked</span><span id="gh-tsum"></span></div></div>
       <div class="gh-rest">
-        <button class="btn sm ghost gh-t" onclick="ghRestPass()">Rest ✓</button>
+        <button class="btn sm ghost gh-t" onclick="ghRestPass()" title="Mark every unmarked item ✓">Rest ✓</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClearMarks()">Clear marks</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClear()">Clear ink</button>
-        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Ghost</button>
+        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Show key</button>
         <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
         <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
         <button class="btn sm ghost gh-t" onclick="ghImportPanel()">目 Import</button>
@@ -75,7 +75,7 @@ function renderGhost(){
       <div class="gh-hd"><h2>${esc(label||'Ghost test')}</h2><span class="s">|</span><span class="tt">Ghost test</span><span class="nm">名前 <u></u></span><span class="sc">得点 <b id="gh-score">___</b> / ${GH.items.length}</span></div>
       <p class="gh-inst">${esc(inst)}</p>
       <div class="gh-grid">${cells}</div>
-      <canvas id="gh-ink"></canvas>
+      <canvas id="gh-ink" role="img" aria-label="Handwriting area — write under each word with the pencil"></canvas>
     </div>
     </div>`;
   ghInit();
@@ -681,7 +681,7 @@ function ghEnding(plan){
   const by={}; for(const x of (plan||[])) by[ghRK(x.kanji,x.direction||'read')]=x;
   const fmt=d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
   const list=wrong.map(w=>{ const x=by[ghRK(w.k,w.rev?'write':'read')]; const d=x?new Date(Date.now()+x.days*864e5):null;
-    return {k:w.k, ans:w.ans, m:w.m, rev:w.rev, when:d?fmt(d):'—', days:x?x.days:null}; });
+    return {k:w.k, ans:w.ans, m:w.m, rev:w.rev, when:d?fmt(d):'', days:x?x.days:null}; });
   // 18–19 of 20 is the check; smaller sheets scale (≥90 % right, or a single miss on 5+ words)
   if(all&&(right/n>=0.9||(wrong.length===1&&n>=5))) return {kind:'check', n, right, wrong:list};
   if(!wrong.length) return null;

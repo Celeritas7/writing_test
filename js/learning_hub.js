@@ -485,7 +485,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Ghost test</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
@@ -590,7 +590,7 @@ function renderSetup(){
     <div class="card"><h2 style="margin-bottom:14px">One-time setup</h2>
       <div class="steps">
         <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
-        <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':DIR_PENDING?'var(--amber)':'var(--red)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'not linked'}</span></div>
+        <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--amber)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'Not linked yet'}</span></div>
           <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
