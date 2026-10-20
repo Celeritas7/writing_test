@@ -120,6 +120,8 @@ a.topic-card{display:block;color:inherit;text-decoration:none}
 .fb:hover{border-color:#c8c2b2}
 .fb .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
 .fb .head b{white-space:nowrap}
+@media (max-width:560px){.fb .head>.mono{flex-basis:100%;margin-left:0!important}.wide-only{display:none}}
+body.gh-full .gh-hd .nm{display:none}
 .fb .notes{font-size:13.5px;color:var(--soft);margin-top:6px}
 .fb .acts,.bopen .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
 .fb .jpw{display:inline-block;margin-right:8px;font-size:15px}.fb .jpw small{font-size:10px;color:var(--mute);margin-left:2px}
@@ -369,7 +371,11 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .nav-item,body.nav-collapsed .side .nav-item{display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 0;min-height:52px;font-size:11px;border-radius:10px}
   .nav-item::before,body.nav-collapsed .nav-item::before{content:attr(data-icon);font-size:18px;line-height:1}
   body.nav-collapsed .nav-item .lbl{display:inline}
+  .nav-item{position:relative}
   .nav-item .cnt,.nav-item .long{display:none}
+  /* badges: the Home due count, and a dot on Settings while the folder needs linking */
+  .nav-item #cnt-home:not(:empty){display:block;position:absolute;top:3px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font:600 10px/16px "IBM Plex Mono",monospace;text-align:center;margin:0}
+  .nav-item #cnt-setup[data-warn=true]{display:block;position:absolute;top:5px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:var(--amber);font-size:0;margin:0}
   .toast{left:12px;right:12px;bottom:calc(var(--tabbar) + 12px);max-width:none;text-align:center}
   .main{padding:18px 16px}
   .grid2{grid-template-columns:1fr 1fr}

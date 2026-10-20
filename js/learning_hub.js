@@ -108,6 +108,10 @@ $('send-link').addEventListener('click', async ()=>{
     : 'Check your inbox for the magic link, then return here.';
 });
 $('email').addEventListener('keydown', e=>{ if(e.key==='Enter') $('send-link').click(); });
+/* install prompt (Chrome/Edge/Android); iOS installs from the Share sheet */
+let INSTALL_EVT=null; const STANDALONE=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_EVT=e; if(/setup|settings/.test(location.hash)) route(); });
+window.installApp=async()=>{ if(!INSTALL_EVT) return; INSTALL_EVT.prompt(); await INSTALL_EVT.userChoice.catch(()=>{}); INSTALL_EVT=null; route(); };
 window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
@@ -246,16 +250,16 @@ function route(){
   // phones land on the dashboard; a wide screen opens straight into the Library
   const h=(location.hash||(matchMedia('(max-width:760px)').matches?'#home':'#library')).slice(1);
   const [page,argRaw]=h.split('/'); const arg=argRaw?decodeURIComponent(argRaw):argRaw;
-  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page==='settings'?'setup':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); $('cnt-home').setAttribute('aria-label',dueN?dueN+' due':''); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
   if(page==='home') renderHome();
   else if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
   else if(page==='ghost') renderGhost();
-  else if(page==='setup') renderSetup();
+  else if(page==='setup'||page==='settings') renderSetup();
   else renderLibrary();
 }
 
@@ -288,7 +292,7 @@ function renderLibrary(){
         <h2>${esc(s.name)}</h2>
         <span class="kicker">${topics.length} topic${topics.length===1?'':'s'} · ${attempted}/${total} attempted</span>${flags}
         ${s.orphan?`<span class="kicker" style="margin-left:auto;color:var(--amber)">subject missing — open a topic to move it</span>`:`<span class="rowtools" style="margin-left:auto" onclick="event.stopPropagation()"><button title="Rename subject" aria-label="Rename ${esc(s.name)}" onclick="renameSubject('${esc(s.id)}')">✎</button><button title="Delete subject" aria-label="Delete ${esc(s.name)}" class="danger" onclick="deleteSubject('${esc(s.id)}')" ${topics.length?'disabled':''}>🗑</button></span>
-        <button class="btn ghost sm" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')">＋ Topic</button>`}
+        <button class="btn ghost sm" onclick="event.stopPropagation();OPEN_SUBS.add('${esc(s.id)}');renderLibrary();toggleForm('tf-${esc(s.id)}')" aria-label="Add a topic to ${esc(s.name)}">＋<span class="wide-only"> Topic</span></button>`}
         <span class="chev">▸</span>
       </div>
       <div class="${open?'':'hide'}" style="padding:12px 2px 6px">
@@ -603,7 +607,17 @@ function renderReview(){
 }
 
 function renderSetup(){
-  $('main').innerHTML=`<div class="kicker">Setup</div><h1 style="margin:4px 0 6px">The loop</h1>
+  $('main').innerHTML=`<div class="kicker">Settings</div><h1 style="margin:4px 0 14px">Settings</h1>
+    <div class="card account" style="margin:4px 0 18px">
+      <h2 style="margin:0 0 4px">Account</h2>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(SESSION.user.email||SESSION.user.id)+'</b>'+(ROLE?' · '+esc(ROLE):'')}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
+        ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
+      </div>
+      ${STANDALONE?'':`<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">${INSTALL_EVT?'Install adds Learning Hub to your home screen; it opens full screen and starts offline.':'To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.'}</p>`}
+    </div>
+    <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
       <div class="node"><b>Build & export</b><span>PDF + manifest → outbox/</span></div><div class="arr">→</div>
       <div class="node"><b>iCloud syncs</b><span>folder appears on iPad</span></div><div class="arr">→</div>
@@ -620,11 +634,7 @@ function renderSetup(){
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
       </div>
     </div>
-    <div class="card account" style="margin-top:16px">
-      <h2 style="margin:0 0 4px">Account</h2>
-      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(SESSION.user.email||SESSION.user.id)+'</b>'+(ROLE?' · '+esc(ROLE):'')}</p>
-      <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
-    </div>`;
+`;
 }
 window.linkFolder=linkFolder;
 
