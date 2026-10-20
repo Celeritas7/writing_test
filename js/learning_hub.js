@@ -110,8 +110,17 @@ $('send-link').addEventListener('click', async ()=>{
 $('email').addEventListener('keydown', e=>{ if(e.key==='Enter') $('send-link').click(); });
 /* install prompt (Chrome/Edge/Android); iOS installs from the Share sheet */
 let INSTALL_EVT=null; const STANDALONE=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_EVT=e; if(/setup|settings/.test(location.hash)) route(); });
-window.installApp=async()=>{ if(!INSTALL_EVT) return; INSTALL_EVT.prompt(); await INSTALL_EVT.userChoice.catch(()=>{}); INSTALL_EVT=null; route(); };
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+let INSTALLED=false; addEventListener('appinstalled',()=>{ INSTALLED=true; INSTALL_EVT=null; if(location.hash==='#setup') route(); });
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_EVT=e; if(location.hash==='#setup') route(); });
+window.installApp=async()=>{
+  const ev=INSTALL_EVT; if(!ev) return;
+  INSTALL_EVT=null;                               // the event is single-use whatever happens next
+  try{ await ev.prompt(); const c=await ev.userChoice; if(c&&c.outcome==='accepted') INSTALLED=true; }catch(e){}
+  if(location.hash==='#setup') route();
+};
+/* who is signed in, for the sidebar foot and the Account card */
+const whoText=()=>DEMO?'demo mode — nothing is saved':((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
 window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
@@ -159,7 +168,7 @@ window.boot=boot;
 async function boot(){
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
   $('main').innerHTML='<p style="color:var(--mute);margin-top:20px">Loading…</p>';
-  $('who').textContent = DEMO ? 'demo mode — nothing is saved' : ((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
+  $('who').textContent = whoText();
   if(!DEMO){
     const [t,p,a,b,s] = await Promise.all([
       sb.from('written_test_topics').select('*').order('branch_no'),
@@ -250,16 +259,16 @@ function route(){
   // phones land on the dashboard; a wide screen opens straight into the Library
   const h=(location.hash||(matchMedia('(max-width:760px)').matches?'#home':'#library')).slice(1);
   const [page,argRaw]=h.split('/'); const arg=argRaw?decodeURIComponent(argRaw):argRaw;
-  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page==='settings'?'setup':page)));
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
-  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); $('cnt-home').setAttribute('aria-label',dueN?dueN+' due':''); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
+  $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-home').setAttribute('aria-hidden','true'); $('cnt-setup').setAttribute('aria-hidden','true'); $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); document.querySelector('.nav-item[data-nav=home]').setAttribute('aria-label', dueN?'Home, '+dueN+' due':'Home'); document.querySelector('.nav-item[data-nav=setup]').setAttribute('aria-label', !DIR&&!DEMO?'Settings, iCloud folder not linked':'Settings'); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
   if(page==='home') renderHome();
   else if(page==='topic') renderTopic(arg);
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
   else if(page==='ghost') renderGhost();
-  else if(page==='setup'||page==='settings') renderSetup();
+  else if(page==='setup') renderSetup();
   else renderLibrary();
 }
 
@@ -610,12 +619,12 @@ function renderSetup(){
   $('main').innerHTML=`<div class="kicker">Settings</div><h1 style="margin:4px 0 14px">Settings</h1>
     <div class="card account" style="margin:4px 0 18px">
       <h2 style="margin:0 0 4px">Account</h2>
-      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(SESSION.user.email||SESSION.user.id)+'</b>'+(ROLE?' · '+esc(ROLE):'')}</p>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
         ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
       </div>
-      ${STANDALONE?'':`<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">${INSTALL_EVT?'Install adds Learning Hub to your home screen; it opens full screen and starts offline.':'To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.'}</p>`}
+      ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
     </div>
     <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">

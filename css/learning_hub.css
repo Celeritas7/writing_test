@@ -121,7 +121,6 @@ a.topic-card{display:block;color:inherit;text-decoration:none}
 .fb .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px}
 .fb .head b{white-space:nowrap}
 @media (max-width:560px){.fb .head>.mono{flex-basis:100%;margin-left:0!important}.wide-only{display:none}}
-body.gh-full .gh-hd .nm{display:none}
 .fb .notes{font-size:13.5px;color:var(--soft);margin-top:6px}
 .fb .acts,.bopen .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
 .fb .jpw{display:inline-block;margin-right:8px;font-size:15px}.fb .jpw small{font-size:10px;color:var(--mute);margin-left:2px}
@@ -249,7 +248,7 @@ body.gh-full .gh-grid{flex:1 1 auto;min-height:0;grid-template-columns:repeat(5,
 body.gh-full .gh-sheet{overflow-y:auto}
 body.gh-full .gh-rule{display:none}
 body.gh-full .gh-item{padding:4px 0 8px}
-body.gh-full h1,body.gh-full .main>.kicker,body.gh-full .gh-top,body.gh-full .main>p,body.gh-full .pillbar,body.gh-full .gh-hd .s,body.gh-full .gh-inst{display:none}
+body.gh-full h1,body.gh-full .main>.kicker,body.gh-full .gh-top,body.gh-full .main>p,body.gh-full .pillbar,body.gh-full .gh-hd .s,body.gh-full .gh-hd .nm,body.gh-full .gh-inst{display:none}
 body.gh-full .gh-exit{display:inline-flex!important}
 @media (max-width:900px){body.gh-full .gh-grid{grid-template-columns:repeat(4,1fr)}}
 /* phones: 20 items cannot fit one screen at a usable size, so fullscreen keeps
