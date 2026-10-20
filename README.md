@@ -18,13 +18,13 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 | Screen | What it does |
 |---|---|
 | **Home** | Due today + Start, streak, 7-day accuracy, last sheet's marks. Phones open here. |
-
-On phones the sections are a bottom tab bar; on wider screens they are the left sidebar.
 | **Library** | Subjects → topics → problems. Add, rename, reorder, edit, delete. Multi-line prompts. |
 | **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF (+ manifest) to `outbox/`, or downloads both. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
 | **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
 | **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
 | **Setup** | The loop, folder link / reconnect, grader instructions, and **Account** (who is signed in, Sign out). |
+
+On phones the sections are a bottom tab bar; on wider screens they are the left sidebar.
 
 ## Spaced repetition
 - Hub problems: rating 1–2 → due next day, 3 → 3 days, 4 → 7 days, 5 → 14 days.
