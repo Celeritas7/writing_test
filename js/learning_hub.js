@@ -167,6 +167,11 @@ async function offlineBoot() {
     const owner = await WTOffline.account();
     if (!owner || !owner.userId) return;
     if (SESSION && SESSION.user.id !== owner.userId) return;
+    /* Do not unlock the last downloaded learner's private pack when another
+       account has signed into the same browser since the download. */
+    let cachedAuth=null;
+    try{cachedAuth=JSON.parse(localStorage.getItem('sb-wylxvmkcrexwfpjpbhyy-auth-token')||'null');}catch(e){}
+    if(!cachedAuth || !cachedAuth.user || cachedAuth.user.id!==owner.userId)return;
     const p = await WTOffline.pack(owner.userId);
     if (!p || !p.verified || !p.problems) return;
     OFFLINE_MODE=true;
