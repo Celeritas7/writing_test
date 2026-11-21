@@ -136,7 +136,7 @@ async function authRole(email){
 }
 let ADMITTING=false;
 async function admit(s){
-  if(!s||SESSION||DEMO||ADMITTING||OFFLINE_MODE) return;
+  if(!s||SESSION||DEMO||ADMITTING||OFFLINE_MODE||!navigator.onLine) return;
   ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
 }
 async function admitInner(s){
