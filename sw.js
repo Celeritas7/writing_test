@@ -7,11 +7,12 @@
      exact version, so a cached copy is never stale.
    - Supabase and everything else: never touched. Data always comes live;
      offline, the app shows its own "Couldn't load your data" card. */
-const VERSION = 'lh-v2';
+const VERSION = 'lh-v3';
+const DOWNLOAD_CACHE = 'lh-ipad-v1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/learning_hub.css',
-  'js/learning_hub.js', 'js/ghost_test.js', 'js/japanese_source.js',
+  'js/offline_store.js', 'js/learning_hub.js', 'js/ghost_test.js', 'js/japanese_source.js',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'
 ];
 const PINNED = [
@@ -27,7 +28,7 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== DOWNLOAD_CACHE).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {

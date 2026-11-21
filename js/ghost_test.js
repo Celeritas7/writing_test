@@ -15,11 +15,11 @@ function renderGhost(){
     <div class="card" style="max-width:640px"><p style="margin:0 0 10px">Ghost test is for <b>language study</b> — word ⇄ reading pairs you write by hand.</p>
     <p style="color:var(--mute);margin:0 0 14px;font-size:13.5px">Pick a set from your Japanese database, or seed a local topic.</p>
     <button class="btn sm" onclick="ghImportPanel()">Browse my Japanese database</button>
-    <button class="btn sm ghost" onclick="ghSeed()">Create “Kanji · Certi/Diploma” with 20 items</button></div>${ghPanelHtml()}`; return; }
+    <button class="btn sm ghost" onclick="ghSeed()">Create “Kanji · Certi/Diploma” with 20 items</button><button class="btn sm ghost" onclick="ghOpenCachedJapanese()">Open downloaded Japanese sheet</button></div>${ghPanelHtml()}`; return; }
   if(!GH.ext&&(!GH.topic||!tops.some(t=>t.id===GH.topic))){ GH.topic=tops[0].id; GH.marks={}; GH.strokes=[]; }
   const label = GH.ext ? GH.ext.label : (TOPICS.find(x=>x.id===GH.topic)||{}).name;
   GH.items = GH.ext ? GH.ext.items : PROBLEMS.filter(p=>p.topic_id===GH.topic&&p.answer).sort((a,b)=>(a.unit_no||a.number)-(b.unit_no||b.number)).slice(0,20);
-  const pills=[`<button class="pill-t ${GH.ext?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`].concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).join('');
+  const pills=[`<button class="pill-t ${GH.ext?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`].concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).concat(`<button class="pill-t" onclick="ghOpenCachedJapanese()">Offline Japanese sheet</button>`).join('');
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
@@ -33,6 +33,7 @@ function renderGhost(){
     : 'Write your answer under each item · ghost overlay shows the key in red')+meanNote;
   $('main').innerHTML=`<div class="gh-top"><div class="gh-title"><div class="kicker">Ghost test</div><h1>Write on screen</h1></div><div class="pillbar">${pills}</div></div>
     ${ghPanelHtml()}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="btn sm ghost" onclick="ghDownloadJapanese()" ${GH.ext&&GH.ext.src==='jp'&&!OFFLINE_MODE?'':'disabled'}>Download this Japanese sheet offline</button></div>
     <div class="gh-bar">
       <button class="btn sm ghost gh-t on" id="gh-pen" onclick="ghTool('pen')">✎ Pen</button>
       <button class="btn sm ghost gh-t" id="gh-erase" onclick="ghTool('erase')">◌ Eraser</button>
@@ -106,7 +107,7 @@ const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
 window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
 function ghPanelHtml(){ return GH_PANEL&&window.jpPanelHtml ? window.jpPanelHtml() : ''; }
-window.ghSeed=async()=>{
+window.ghSeed=async()=>{ if(OFFLINE_MODE){toast('Adding topics requires internet.');return;}
   const KJ=[['生える','はえる'],['六人','ろくにん'],['歩く','あるく'],['先々月','せんせんげつ'],['七人','しちにん'],['一年','いちねん'],['小学校','しょうがっこう'],['少女','しょうじょ'],['千本','せんぼん'],['あの方','あのかた'],['五万円','ごまんえん'],['先週','せんしゅう'],['上手(な)','じょうず'],['休み','やすみ'],['時間','じかん'],['のぼり','上り'],['げんき','元気'],['ちいさい','小さい'],['てま','手間'],['つぶら','円ら']];
   let sub=SUBJECTS.find(s=>GH_LANG.test(s.name));
   if(!sub){ sub={id:'language_study', name:'Language Study', sort_no:(SUBJECTS.length||0)+1};
@@ -604,6 +605,26 @@ async function ghSaveNow(){
     if(a===true){ ghRestPass(); return ghSaveNow(); }
   }
   const hub=!GH.ext||GH.ext.src==='hub';
+  if(OFFLINE_MODE || !navigator.onLine){
+    if(DEMO||!SESSION||!window.WTOffline){toast('No verified offline account found; results remain in this sheet.');return;}
+    const owner=SESSION.user.id, now=new Date().toISOString();
+    const id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random());
+    const marked=GH.items.filter(p=>GH.marks[p.id]);
+    const localRows=rows.map(r=>({...r,id:crypto.randomUUID(),user_id:owner}));
+    const item={id,owner,kind:hub?'hub':'jp',createdAt:now,
+      rows:hub?localRows:[],items:hub?[]:marked.map(p=>({kanji:p.kanji||p.prompt,direction:ghDirOf(p),rating:GH.marks[p.id]===1?5:GH.marks[p.id]===2?3:1,
+        seconds:ghSeconds(p.id),correct:GH.marks[p.id]===1}))};
+    try{await WTOffline.queue(item);}
+    catch(e){toast('Device save failed — your sheet is preserved: '+e.message,8000);return;}
+    if(hub)ATTEMPTS=localRows.concat(ATTEMPTS);
+    ghLogSession();
+    ghDraftClear();
+    toast(hub?'Saved on iPad · Sync pending':'Japanese results saved on iPad only · sync not yet available',7000);
+    const end=ghEnding(null);
+    if(!end){ghExit();return;}
+    GH.locked=true; $('gh-sheet').classList.add('locked'); ghDrawer(true); ghShowEnding(end);
+    return;
+  }
   if(!DEMO&&hub){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
   if(hub) ATTEMPTS=rows.concat(ATTEMPTS);
   let extra='', plan=null;
@@ -756,3 +777,24 @@ window.ghEndClose=()=>{ document.querySelectorAll('[data-end]').forEach(x=>x.rem
 window.ghShowEnding=ghShowEnding; window.ghEnding=ghEnding;
 /* the wide layout is only for this view — drop it when the route changes */
 addEventListener('hashchange',()=>{ if(!/ghost/.test(location.hash)){ document.body.classList.remove('gh-view'); clearInterval(GH._clock); GH.focus=null; } });
+
+/* Offline Japanese packs are explicitly selected by the learner.
+   Never access another account's IndexedDB pack. */
+window.ghDownloadJapanese=async()=>{
+  if(!GH.ext||GH.ext.src!=='jp'||OFFLINE_MODE||!SESSION||!window.WTOffline||!navigator.onLine){
+    toast('Open a Japanese database sheet while connected first.');return;
+  }
+  try{
+    await WTOffline.saveJapanese(SESSION.user.id,{label:GH.ext.label,items:GH.items});
+    toast('Japanese sheet downloaded: '+GH.items.length+' words. Open it offline from Ghost Test.');
+  }catch(e){toast('Japanese download failed: '+e.message,6500);}
+};
+window.ghOpenCachedJapanese=async()=>{
+  if(!SESSION||!window.WTOffline){toast('Download a sheet while signed in first.');return;}
+  try{
+    const p=await WTOffline.japanese(SESSION.user.id);
+    if(!p||!p.items||!p.items.length){toast('No Japanese sheet downloaded yet. Open a Japanese set online and tap Download this Japanese sheet offline.');return;}
+    GH.ext={label:p.label+' · offline pack',src:'jp',items:p.items};
+    ghFresh(); GH_PANEL=false; renderGhost();
+  }catch(e){toast('Could not open Japanese sheet: '+e.message,6500);}
+};
