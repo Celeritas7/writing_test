@@ -10,6 +10,7 @@ const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
+let OFFLINE_MODE=false, OFFLINE_SYNCING=false;
 let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 /* an id that is never empty (Japanese or symbol-only names) and never collides with an existing row */
@@ -122,7 +123,7 @@ window.installApp=async()=>{
 };
 /* who is signed in, for the sidebar foot and the Account card */
 const whoText=()=>DEMO?'demo mode — nothing is saved':((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
-window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
+window.signOut=async()=>{ if(OFFLINE_MODE){ toast('Reconnect before signing out. Your offline pack stays on this device.'); return; } if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
 /* returns the allowlist row, null if not listed, or {error} if unreadable */
@@ -135,7 +136,7 @@ async function authRole(email){
 }
 let ADMITTING=false;
 async function admit(s){
-  if(!s||SESSION||DEMO||ADMITTING) return;
+  if(!s||SESSION||DEMO||ADMITTING||OFFLINE_MODE) return;
   ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
 }
 async function admitInner(s){
@@ -157,7 +158,32 @@ async function admitInner(s){
   try{ await boot(); }catch(e){ loadError(e.message||String(e)); }
 }
 sb.auth.onAuthStateChange((_e,s)=>{ admit(s); });
-sb.auth.getSession().then(({data})=>{ admit(data.session); });
+sb.auth.getSession().then(({data})=>{ admit(data.session); }).catch(()=>{});
+/* A previously verified owner may open their explicitly downloaded pack without
+   requesting OAuth or allowlist access over an unavailable network. */
+async function offlineBoot() {
+  if (LOADED || DEMO || navigator.onLine || !window.WTOffline) return;
+  try {
+    const owner = await WTOffline.account();
+    if (!owner || !owner.userId) return;
+    if (SESSION && SESSION.user.id !== owner.userId) return;
+    const p = await WTOffline.pack(owner.userId);
+    if (!p || !p.verified || !p.problems) return;
+    OFFLINE_MODE=true;
+    SESSION={user:{id:owner.userId,email:owner.email}};
+    ROLE=owner.role;
+    SUBJECTS=p.subjects||[]; TOPICS=p.topics||[]; PROBLEMS=p.problems||[];
+    ATTEMPTS=p.attempts||[]; BATCHES=p.batches||[];
+    const queued=await WTOffline.pending(owner.userId);
+    for (const item of queued) if(item.kind==='hub') ATTEMPTS.push(...item.rows);
+    LOADED=true; $('gate').classList.add('hide'); $('app').classList.remove('hide');
+    $('who').textContent=(owner.email||'Offline learner')+' · offline';
+    route();
+  } catch(e) { $('gate-msg').textContent='Offline pack could not be opened: '+e.message; }
+}
+if(!navigator.onLine) offlineBoot();
+addEventListener('offline',()=>{ if(!LOADED) offlineBoot(); });
+addEventListener('online',()=>{ if(OFFLINE_MODE){ OFFLINE_MODE=false; LOADED=false; SESSION=null; ROLE=null; sb.auth.getSession().then(({data})=>{ if(data.session) admit(data.session); else location.reload(); }).catch(()=>loadError('Reconnect and sign in to sync offline work.')); } });
 
 /* ---------- data ---------- */
 function loadError(msg){
@@ -335,7 +361,7 @@ window.toggleForm=id=>{ const f=$(id); f.classList.toggle('hide'); if(!f.classLi
 /* one submit at a time: the button is disabled while the insert is in flight */
 async function busy(f, fn){ if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
 window.addSubject=e=>{ e.preventDefault(); busy(e.target, ()=>addSubjectNow(e.target)); return false; };
-async function addSubjectNow(f){
+async function addSubjectNow(f){ if(OFFLINE_MODE){ toast('Editing requires internet. Your offline study pack is read-only.'); return false; }
   const name=f.name.value.trim(); if(!name) return false;
   if(SUBJECTS.some(s=>s.name.toLowerCase()===name.toLowerCase())){ toast('That subject already exists.'); return false; }
   const row={id:uniqueId(name, new Set(SUBJECTS.map(s=>s.id))), sort_no:Math.max(0,...SUBJECTS.map(s=>s.sort_no||0))+1, name, tagline:f.tagline.value.trim()||null};
@@ -343,7 +369,7 @@ async function addSubjectNow(f){
   SUBJECTS.push(row); toast(name+' added.'); route(); return false;
 };
 window.addTopic=(e,sid)=>{ e.preventDefault(); busy(e.target, ()=>addTopicNow(e.target,sid)); return false; };
-async function addTopicNow(f,sid){
+async function addTopicNow(f,sid){ if(OFFLINE_MODE){ toast('Editing requires internet.'); return false; }
   const name=f.name.value.trim(); if(!name) return false;
   const sibs=TOPICS.filter(t=>subjectOf(t)===sid);
   if(sibs.some(t=>t.name.toLowerCase()===name.toLowerCase())){ toast('This subject already has a topic with that name.'); return false; }
@@ -352,7 +378,7 @@ async function addTopicNow(f,sid){
   TOPICS.push(row); toast(name+' added — now add problems to it.'); location.hash='topic/'+row.id; return false;
 };
 window.addProblem=(e,tid)=>{ e.preventDefault(); busy(e.target, ()=>addProblemNow(e.target,tid)); return false; };
-async function addProblemNow(f,tid){
+async function addProblemNow(f,tid){ if(OFFLINE_MODE){ toast('Editing requires internet.'); return false; }
   const subtitle=f.subtitle.value.trim(), prompt=f.prompt.value.trim();
   if(!subtitle||!prompt) return false;
   const sibs=PROBLEMS.filter(p=>p.topic_id===tid);
@@ -413,8 +439,8 @@ function problemForm(tid,p){
     </form>`;
 }
 /* ---------- edit / delete / reorder ---------- */
-async function dbUpdate(table,id,patch){ if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
-async function dbDelete(table,id){ if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
+async function dbUpdate(table,id,patch){ if(OFFLINE_MODE){ toast('Connect to edit your library.'); return false; } if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
+async function dbDelete(table,id){ if(OFFLINE_MODE){ toast('Connect to edit your library.'); return false; } if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
 window.editProblem=id=>{ EDIT_P=id; route(); setTimeout(()=>{ const el=$('pr-'+id); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },50); };
 window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
   const f=e.target, p=PROBLEMS.find(x=>x.id===id); if(!p) return false;
@@ -553,6 +579,7 @@ function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?subject
 /* Build view pre-filtered to one topic: weak problems rank first, so a wrong answer lands at the top */
 window.practise=tid=>{ buildSel.topic=tid; buildSel.subject=topicSubject(tid)||'all'; location.hash='build'; if(location.hash==='#build') renderBuild(); };
 window.setBatchStatus=async(id,status)=>{
+  if(OFFLINE_MODE){ toast('Batch status updates require internet.'); return; }
   const b=BATCHES.find(x=>x.id===id); if(!b) return;
   if(!DEMO){ const {error}=await sb.from('written_test_batches').update({status}).eq('id',id); if(error){ toast('Could not update batch: '+error.message,5000); return; } }
   b.status=status; toast('Batch marked '+status+'.'); renderReview();
@@ -627,6 +654,16 @@ function renderSetup(){
       </div>
       ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
     </div>
+    <div class="card" style="margin:0 0 18px">
+      <h2>Study offline on iPad</h2>
+      <p style="font-size:13px;color:var(--soft)">Download while connected, then open Learning Hub from your Home Screen without internet. Your question library and results remain on this iPad. Japanese Ghost Test sheets can be saved separately while online.</p>
+      <div class="acts" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+        <button class="btn sm" onclick="downloadOfflinePack()" ${OFFLINE_MODE||DEMO?'disabled':''}>Download study offline</button>
+        <button class="btn sm ghost" onclick="syncOfflineResults()" ${OFFLINE_MODE||DEMO?'disabled':''}>Sync pending results</button>
+        <span id="offline-status" style="font-size:12px;color:var(--mute)">${OFFLINE_MODE?'Offline pack in use':'Check offline readiness below'}</span>
+      </div>
+      <p style="font-size:12px;color:var(--mute);margin-top:10px">This does not clear website data. iPadOS can evict site storage; export important work and keep your Home Screen app installed.</p>
+    </div>
     <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
       <div class="node"><b>Build & export</b><span>PDF + manifest → outbox/</span></div><div class="arr">→</div>
@@ -645,6 +682,7 @@ function renderSetup(){
       </div>
     </div>
 `;
+  updateOfflineStatus();
 }
 window.linkFolder=linkFolder;
 
@@ -681,7 +719,7 @@ async function writeText(dirHandle, name, text){
 
 /* ---------- export ---------- */
 let EXPORTING=false;
-async function exportBatch(){
+async function exportBatch(){ if(OFFLINE_MODE){ toast('Offline worksheet export is not enabled yet. Use a downloaded PDF or Ghost Test.'); return; }
   if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   if(!q.length) return;
@@ -843,3 +881,51 @@ curl -s -X PATCH "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1/written_test_
 
 Never modify files in outbox/. Never write secrets into this folder (it syncs to iCloud).`;
 }
+
+/* ---------- iPad offline download & retry-safe hub sync ---------- */
+async function updateOfflineStatus(){
+  const el=$('offline-status'); if(!el||!window.WTOffline)return;
+  try {
+    const id=SESSION&&SESSION.user&&SESSION.user.id;
+    const p=id&&await WTOffline.pack(id);
+    const count=id?(await WTOffline.pending(id)).length:0;
+    const ready=await WTOffline.assetsReady();
+    if(!el.isConnected)return;
+    el.textContent=(p?'Study pack: '+p.problems.length+' problems · '+new Date(p.savedAt).toLocaleDateString():'No study pack')+
+      ' · '+(ready?'App files ready':'App files incomplete')+' · '+count+' pending';
+  } catch(e) {el.textContent='Offline status unavailable: '+e.message;}
+}
+window.downloadOfflinePack=async()=>{
+  if(!window.WTOffline||OFFLINE_MODE||DEMO||!SESSION)return;
+  if(!navigator.onLine){toast('Connect to download your study pack.');return;}
+  const el=$('offline-status');let assets;
+  try{
+    if(el)el.textContent='Saving app files…';
+    assets=await WTOffline.cacheAssets((n,total,bytes)=>{if(el&&el.isConnected)el.textContent='Downloading '+n+'/'+total+' · '+(bytes/1048576).toFixed(1)+' MB';});
+    const pack={id:SESSION.user.id,email:SESSION.user.email,role:ROLE,verified:true,
+      savedAt:new Date().toISOString(),subjects:SUBJECTS,topics:TOPICS,problems:PROBLEMS,
+      attempts:ATTEMPTS,batches:BATCHES};
+    await WTOffline.savePack(pack);
+    toast('Ready offline: '+PROBLEMS.length+' problems; '+(assets/1048576).toFixed(1)+' MB of app assets.');
+  } catch(e){toast('Download incomplete: '+e.message,7000);}
+  updateOfflineStatus();
+};
+window.syncOfflineResults=async()=>{
+  if(OFFLINE_SYNCING||OFFLINE_MODE||DEMO||!SESSION||!navigator.onLine||!window.WTOffline)return;
+  OFFLINE_SYNCING=true;
+  try{
+    const jobs=await WTOffline.pending(SESSION.user.id);
+    const jp=jobs.filter(x=>x.kind==='jp'), hub=jobs.filter(x=>x.kind==='hub');
+    for(const job of hub){
+      const {error}=await sb.from('written_test_attempts').upsert(job.rows,{onConflict:'id'});
+      if(error)throw error;
+      await WTOffline.remove(job.id);
+    }
+    /* Japanese rows have aggregate counters/history and require a separate
+       idempotent server-side contract before they can be replayed safely. */
+    if(jp.length)toast(hub.length+' hub sessions synced. '+jp.length+' Japanese session(s) retained locally for safe manual review.',7500);
+    else toast(hub.length+' offline session(s) synced.');
+    await boot(); updateOfflineStatus();
+  }catch(e){toast('Sync failed; offline results retained: '+(e.message||e),7000);}
+  finally{OFFLINE_SYNCING=false;}
+};
