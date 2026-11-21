@@ -528,7 +528,7 @@ function renderHome(){
   const latest=latestByProblem();
   let weak=0, due=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak') weak++; else if(c==='due') due++; }
   const jp=(typeof JPS!=='undefined')?JPS:{};
-  const jpReadyNow=!DEMO&&typeof jpReady==='function'&&jpReady();
+  const jpReadyNow=!DEMO&&!OFFLINE_MODE&&navigator.onLine&&typeof jpReady==='function'&&jpReady();
   if(jpReadyNow&&!HOME_JP&&typeof jpDueCount==='function'){ HOME_JP=true; jpDueCount().then(()=>{ if(location.hash==='#home'||(!location.hash&&matchMedia('(max-width:760px)').matches)) renderHome(); }); }
   const jpDue=jp.dueCount==null?null:jp.dueCount;
   // accuracy over the last 7 days: Cowork + ghost attempts, plus Japanese sheets from the local log
@@ -554,7 +554,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}<a class="btn sm ghost" href="#setup">Study offline</a></div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
