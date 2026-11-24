@@ -63,6 +63,7 @@ Optional source provenance on an item can use a `source` object containing `proj
 - Confirm and secure Technical Supabase account mapping, grants, RLS and cross-project session claims before enabling any direct authenticated content access or user-evidence upload. The earlier permissive Japanese RLS policies remain a separate security blocker.
 - F1C/F2 must map source records to approved lexemes/senses/forms; separate writing from recognition; retain category semantics; and deduplicate by immutable event IDs without overriding other apps' progress.
 - The multilingual pack browser currently stores imported content and evidence on one device. iPadOS may evict local browser storage. Export local results regularly; backups are not a substitute for a tested cloud sync.
+- IndexedDB entries are **namespaced by account but not encrypted**. Another person with access to the device/browser storage could inspect them. Do not treat this as a secure multi-user privacy boundary; complete identity and storage protection is required before any shared-device production rollout.
 - These changes do **not** deploy, merge, modify production databases or storage, or update the unmerged iPad offline PR #5.
 
 ## Next
