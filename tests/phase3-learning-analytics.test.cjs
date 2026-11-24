@@ -169,9 +169,12 @@ test('failed page refresh leaves previously loaded attempts in place',async()=>{
     esc:str=>String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;')
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
     pstatus:statusOf,
-    sb:{from:()=>({select:()=>({order:()=>({range:async()=>({
-      data:null,error:new Error('Network unavailable')
-    })})})})}
+    sb:{from:()=>({select:()=>{
+      const query={order(){return query;},range:async()=>({
+        data:null,error:new Error('Network unavailable')
+      })};
+      return query;
+    }})}
   };
   vm.runInNewContext(view,ui);
   await ui.window.refreshAnalytics();
