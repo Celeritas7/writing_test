@@ -399,6 +399,15 @@
     ].join('');
     applyHandlers({'qp-new':()=>{Q.finished=null;setupView();}});
   }
+  /* Analytics requests a specific topic without replacing a saved session. */
+  window.quickPracticeFor=(topic,mode='weak')=>{
+    if(Q.session){toast('Finish or discard your current Quick Practice session before starting another topic.',6000);}
+    else {
+      Q.opts.subject='all';Q.opts.topic=topic;Q.opts.mode=mode;
+    }
+    location.hash='#quick';
+    if(onPage())renderQuickPractice();
+  };
   window.renderQuickPractice=function(){
     const current=owner();
     if(Q.loadedFor!==current){

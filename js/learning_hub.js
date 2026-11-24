@@ -66,7 +66,7 @@ function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList
 
 /* ---------- sidebar collapse ----------------------------------------
    data-icon feeds the collapsed rail's ::before glyph. */
-const NAV_ICONS={home:'⌂', library:'▤', quick:'⚡', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
+const NAV_ICONS={home:'⌂', library:'▤', quick:'⚡', analytics:'▥', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
 (function initNav(){
   for(const el of document.querySelectorAll('.nav-item')) el.dataset.icon=NAV_ICONS[el.dataset.nav]||'•';
   const b=document.getElementById('nav-toggle'); if(!b) return;
@@ -267,6 +267,7 @@ function route(){
   if(page==='home') renderHome();
   else if(page==='topic') renderTopic(arg);
   else if(page==='quick') renderQuickPractice();
+  else if(page==='analytics') renderAnalytics();
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
   else if(page==='ghost') renderGhost();
@@ -533,7 +534,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#analytics">Learning trends</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
@@ -541,9 +542,9 @@ function renderHome(){
         <div class="sub">${jpReadyNow?(jp.streak?'Writing sheets on consecutive days.':'Write a sheet today to start one.'):'Counted from your Japanese sheets once the database is connected.'}</div>
       </div>
       <div class="tile">
-        <div class="kicker">Accuracy · 7 days</div>
+        <div class="kicker">Correct marks · 7 days</div>
         <div class="big">${acc==null?'—':acc+'<small>%</small>'}</div>
-        <div class="sub">${n?`${ok} right of ${n} answers`:'No graded work this week yet.'}</div>
+        <div class="sub">${n?`${ok} correct of ${n} recorded marks`:'No marks recorded this week yet.'} · Mixed assessment methods. <a href="#analytics">See separate trends</a>.</div>
       </div>
       <div class="tile wide">
         <div class="kicker">Last sheet</div>
@@ -683,6 +684,7 @@ function renderReview(){
     <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
     <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
+    <div style="margin:0 0 14px"><a class="btn sm ghost" href="#analytics">View learning analytics</a></div>
     <h2 style="margin:0 0 8px">Feedback</h2>
     <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
     ${fb}
