@@ -155,13 +155,22 @@ window.ghFresh=()=>{
    store) a second after each change, and come back on the next visit for
    7 days. Nothing leaves the device; a save or a new set clears it. */
 const GH_DRAFT_KEY='gh-draft', GH_DRAFT_TTL=7*864e5;
+const GH_LEX_DRAFT_KEY=id=>'gh-draft-lex-'+id;
+function ghCurrentDraftKey(){
+  if(GH.ext&&GH.ext.src==='lex_import'){
+    const owner=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+    if(!owner||GH.ext.owner!==owner)throw Error('Cannot save another account\'s imported draft');
+    return GH_LEX_DRAFT_KEY(owner);
+  }
+  return GH_DRAFT_KEY;
+}
 let ghDraftT=0;
 /* Persist synchronously before a network write, not just the debounced
    ordinary handwriting draft. The same session ID survives interrupted saves. */
 async function ghDraftPersist(){
   if(GH.locked||!GH.items.length||typeof idb==='undefined') throw new Error('Local draft storage unavailable');
   const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
-  await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
+  await idb.set(ghCurrentDraftKey(),{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
     marks:GH.marks, strokes, time:GH.time, sessionId:GH.sessionId||null,
     attemptIds:GH.attemptIds||{}, attemptTime:GH.attemptTime||null,
     savePrepared:!!GH.savePrepared});
@@ -171,11 +180,23 @@ function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
   if(!GH.strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
   try{ await ghDraftPersist(); }catch(e){}
 },800); }
-function ghDraftClear(){ clearTimeout(ghDraftT); if(typeof idb!=='undefined') idb.set(GH_DRAFT_KEY,null).catch(()=>{}); }
+function ghDraftClear(){
+  clearTimeout(ghDraftT);
+  if(typeof idb!=='undefined'){
+    try{ idb.set(ghCurrentDraftKey(),null).catch(()=>{}); }catch(e){}
+  }
+}
 let ghDraftChecked=false;
 async function ghDraftRestore(){
   if(ghDraftChecked||typeof idb==='undefined') return false; ghDraftChecked=true;
-  let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
+  let d=null;
+  try{
+    d=await idb.get(GH_DRAFT_KEY); // preserve the existing Japanese/Hub resume path
+    if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL){
+      const id=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+      if(id)d=await idb.get(GH_LEX_DRAFT_KEY(id));
+    }
+  }catch(e){}
   if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
   if(d.ext&&d.ext.src==='lex_import'){
     const current=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
