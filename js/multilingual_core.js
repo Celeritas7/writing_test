@@ -62,7 +62,9 @@
       const senseId=optional(lex?r.sense_id:(r.source&&r.source.sense_id),120);
       const script=optional(lex?r.script_code:r.script,40);
       const sourcePkType=optional(lex?r.source_pk_type:(r.source&&r.source.pk_type),40);
-      const duplicate=[sourceProject,sourceApp,sourceTable,id].join('\u0001');
+      // Each pack record ID is unique; source provenance may still distinguish
+      // the same spelling across different source projects or senses.
+      const duplicate=id;
       if(keys.has(duplicate))throw Error('Duplicate source identifier in pack: '+id);
       keys.add(duplicate);
       normalized.push({id,form,reading,meaning,script,
