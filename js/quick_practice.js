@@ -188,6 +188,7 @@
         await idb.set(key(),JSON.parse(JSON.stringify(next)));
       }
       Q.session=next;Q.finished=null;Q.lastTick=Date.now();renderQuickPractice();
+      focusPractice('qp-current-step');
     }catch(e){toast('Cannot store a new practice session: '+(e.message||e),6500);}
     finally{Q.busy=false;}
   }
@@ -198,12 +199,14 @@
     Q.lastTick=Q.session.paused?null:Date.now();
     try{await saveSnapshot();}catch(e){toast('Draft could not be saved: '+(e.message||e),6000);}
     renderQuickPractice();
+    focusPractice('qp-current-step');
   }
   async function reveal(){
     const s=Q.session;if(!s||s.phase!=='active')return;
     s.items[s.cursor].revealed=true;
     try{await saveSnapshot();}catch(e){toast('Draft save failed: '+(e.message||e),6000);}
     renderQuickPractice();
+    focusPractice('qp-revealed-answer');
   }
   async function grade(value){
     const s=Q.session;if(!s||s.phase!=='active')return;
@@ -213,6 +216,7 @@
     if(s.cursor<s.items.length-1)s.cursor++;
     try{await saveSnapshot();}catch(e){toast('Rating not securely saved: '+(e.message||e),7000);return;}
     renderQuickPractice();
+    focusPractice('qp-current-step');
   }
   async function skip(){
     const s=Q.session;if(!s||s.phase!=='active')return;
@@ -220,6 +224,7 @@
     if(s.cursor<s.items.length-1)s.cursor++;
     try{await saveSnapshot();}catch(e){toast('Draft could not be saved: '+(e.message||e),6000);}
     renderQuickPractice();
+    focusPractice('qp-current-step');
   }
   function response(text){
     const s=Q.session;if(!s||s.phase!=='active')return;
@@ -284,6 +289,14 @@
     try{await removeSnapshot(Q.session.owner);}catch(e){toast('Cannot clear saved draft: '+(e.message||e),7000);return;}
     Q.session=null;Q.lastTick=null;Q.finished=null;renderQuickPractice();
   }
+  // Re-rendering the practice card otherwise drops VoiceOver/keyboard focus.
+  function focusPractice(id){
+    if(!onPage())return;
+    const el=$(id);
+    if(el&&typeof el.focus==='function'){
+      try{el.focus({preventScroll:true});}catch(e){el.focus();}
+    }
+  }
   function applyHandlers(map){
     for(const [id,callback] of Object.entries(map)){
       const el=$(id);
@@ -298,10 +311,10 @@
     const options=(arr,chosenId)=>arr.map(x=>
       '<option value="'+esc(x.id)+'"'+(x.id===chosenId?' selected':'')+'>'+esc(x.name)+'</option>').join('');
     const modes=MODES.map(m=>'<button class="qp-mode'+(Q.opts.mode===m.id?' selected':'')+
-      '" type="button" data-qmode="'+m.id+'" aria-pressed="'+(Q.opts.mode===m.id)+'">'+
+      '" id="qp-mode-'+m.id+'" type="button" data-qmode="'+m.id+'" aria-pressed="'+(Q.opts.mode===m.id)+'">'+
       '<strong>'+esc(m.name)+'</strong><small>'+esc(m.hint)+' · '+available[m.id]+' available</small></button>').join('');
     const lengths=DURATIONS.map(n=>'<button type="button" class="pill-t'+(Q.opts.minutes===n?' on':'')+
-      '" data-qminutes="'+n+'" aria-pressed="'+(Q.opts.minutes===n)+'">'+n+' minutes</button>').join('');
+      '" id="qp-minutes-'+n+'" data-qminutes="'+n+'" aria-pressed="'+(Q.opts.minutes===n)+'">'+n+' minutes</button>').join('');
     $('main').innerHTML=[
       '<div class="kicker">Quick Practice</div>',
       '<h1 style="margin:4px 0 6px">A focused study session</h1>',
@@ -309,21 +322,23 @@
       '<div class="card qp-setup">',
       '<div class="qp-selectors"><div><label for="qp-subject">Subject</label><select id="qp-subject">'+options(subjects,Q.opts.subject)+'</select></div>',
       '<div><label for="qp-topic">Topic</label><select id="qp-topic">'+options(topics,Q.opts.topic)+'</select></div></div>',
-      '<div class="qp-subheading">What should I practise?</div><div class="qp-modes">'+modes+'</div>',
-      '<div class="qp-subheading">Session length</div><div class="pillbar">'+lengths+'</div>',
+      '<div class="qp-subheading" id="qp-mode-label">What should I practise?</div><div class="qp-modes" role="group" aria-labelledby="qp-mode-label">'+modes+'</div>',
+      '<div class="qp-subheading" id="qp-length-label">Session length</div><div class="pillbar" role="group" aria-labelledby="qp-length-label">'+lengths+'</div>',
       '<p class="qp-hint">'+chosen.length+' question'+(chosen.length===1?'':'s')+
         ' selected. The timer is a goal, not a forced cutoff. You can pause, skip, or finish early.</p>',
       '<button class="btn" id="qp-start" '+(!chosen.length?'disabled':'')+'>Start practice</button>',
       !chosen.length?'<p class="msg">No matching questions. Try another mode or topic. Questions need a saved prompt; some may not have reference answers.</p>':'',
       '</div>'
     ].join('');
-    $('qp-subject').addEventListener('change',e=>{Q.opts.subject=e.target.value;Q.opts.topic='all';setupView();});
-    $('qp-topic').addEventListener('change',e=>{Q.opts.topic=e.target.value;setupView();});
+    $('qp-subject').addEventListener('change',e=>{Q.opts.subject=e.target.value;Q.opts.topic='all';setupView();focusPractice('qp-subject');});
+    $('qp-topic').addEventListener('change',e=>{Q.opts.topic=e.target.value;setupView();focusPractice('qp-topic');});
     document.querySelectorAll('[data-qmode]').forEach(el=>el.addEventListener('click',()=>{
       Q.opts.mode=el.dataset.qmode;setupView();
+      focusPractice('qp-mode-'+Q.opts.mode);
     }));
     document.querySelectorAll('[data-qminutes]').forEach(el=>el.addEventListener('click',()=>{
       Q.opts.minutes=Number(el.dataset.qminutes);setupView();
+      focusPractice('qp-minutes-'+Q.opts.minutes);
     }));
     applyHandlers({'qp-start':start});
   }
@@ -348,7 +363,7 @@
     ].join('');
     $('main').innerHTML=[
       '<div class="kicker">Quick Practice · '+esc(s.opts.mode)+'</div>',
-      '<div class="qp-top"><div><h1>Question '+(s.cursor+1)+' / '+n+'</h1>',
+      '<div class="qp-top"><div><h1 id="qp-current-step" tabindex="-1">Question '+(s.cursor+1)+' / '+n+'</h1>',
       '<p class="qp-hint">'+rated+' rated · '+esc(topic?topic.name:item.topic_id)+'</p></div>',
       '<div class="qp-clock"><span id="qp-timer-label">'+
         (s.expired?'Time is up':s.paused?'Timer paused':'Time remaining')+
@@ -364,10 +379,10 @@
         (pending?' disabled':'')+'></textarea>',
       '<p class="qp-hint">Self-check only. For freehand Apple Pencil writing, use Ghost Test or a PDF worksheet.</p>',
       !item.revealed?'<button class="btn" id="qp-reveal" '+(pending?'disabled':'')+'>Reveal reference answer</button>':
-        '<div class="qp-answer"><div class="qp-answer-label">Reference answer</div><div>'+
+        '<div class="qp-answer" id="qp-revealed-answer" role="region" aria-label="Reference answer" tabindex="-1"><div class="qp-answer-label">Reference answer</div><div>'+
           esc(answer||'No reference answer saved for this problem. Use your notes to self-assess.')+'</div>'+
           (item.worked&&item.worked!==answer?'<div class="qp-worked"><b>Worked solution</b><div>'+esc(item.worked)+'</div></div>':'')+'</div>',
-      '<div class="qp-mark-label">Rating: '+esc(status)+'</div>',
+      '<div class="qp-mark-label" role="status" aria-live="polite">Rating: '+esc(status)+'</div>',
       item.revealed&&!pending?'<div class="qp-markers">'+
         '<button class="btn sm ghost" id="qp-mark-5">✓ Correct</button>'+
         '<button class="btn sm ghost" id="qp-mark-3">△ Almost</button>'+

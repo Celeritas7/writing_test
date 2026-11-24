@@ -35,10 +35,21 @@ function renderGhost(){
   const pills=[`<button class="pill-t ${GH.ext&&GH.ext.src!=='lex_import'?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`,
     `<button class="pill-t ${GH.ext&&GH.ext.src==='lex_import'?'on':''}" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>`]
     .concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).join('');
+  // On narrow screens the large desktop header is hidden; keep source
+  // switching and Hub-topic selection reachable for touch and VoiceOver.
+  const ghMobileTopicOptions=tops.map(t=>`<option value="${esc(t.id)}" ${!GH.ext&&GH.topic===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
+  const ghMobileSources=`<div class="gh-source-mobile" role="group" aria-label="Choose writing source">
+    <button class="btn sm ghost" type="button" onclick="ghImportPanel()" aria-expanded="${!!GH_PANEL}">Japanese sets</button>
+    <button class="btn sm ghost" type="button" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>
+    ${tops.length?`<label for="gh-mobile-topic">Hub topic</label>
+      <select id="gh-mobile-topic" aria-label="Choose Hub writing topic" onchange="if(this.value)ghPick(this.value)">
+        <option value="" ${GH.ext?'selected':''} disabled>Select topic</option>${ghMobileTopicOptions}
+      </select>`:''}
+  </div>`;
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
-    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><span class="gh-n${m?' m'+m:''}" role="button" tabindex="0" aria-label="Item ${i+1}: ${m?['','correct','partly','wrong'][m]:'unmarked'} — press to mark" onpointerup="ghMark(event,'${esc(p.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ghMark(event,'${esc(p.id)}')}">${i+1}.</span> <span class="gh-w${p.mean?' en':''}">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
+    return (i===firstRev&&i>0?`<div class="gh-rule"></div>`:'')+`<div class="gh-item${p.retry?' retry':''}" data-gid="${esc(p.id)}"><button type="button" class="gh-n${m?' m'+m:''}" aria-label="Item ${i+1}: ${m?['','correct','partly correct','wrong'][m]:'unmarked'} — press to cycle the mark" onclick="ghMark(event,'${esc(p.id)}')">${i+1}.</button> <span class="gh-w${p.mean?' en':''}">${esc(p.prompt||p.subtitle)}</span><span class="gh-clk${ghSlowNow(p.id)?' on':''}" aria-label="Slow for this word">◷</span><span class="gh-t-sec">${GH.time[p.id]?Math.round(GH.time[p.id])+'s':''}</span><span class="gh-mk ${['','ok','mid','bad'][m]}">${['','✓','△','✗'][m]}</span><span class="gh-g">${esc(p.answer)}</span></div>`;
   }).join('');
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
   const nMean=GH.items.filter(p=>p.mean).length;
@@ -50,14 +61,15 @@ function renderGhost(){
     : nRev ? 'ひらがな→漢字 (write) · ghost overlay shows the key in red'
     : 'Write your answer under each item · ghost overlay shows the key in red')+meanNote;
   $('main').innerHTML=`<div class="gh-top"><div class="gh-title"><div class="kicker">Ghost test</div><h1>Write on screen</h1></div><div class="pillbar">${pills}</div></div>
+    ${ghMobileSources}
     ${ghPanelHtml()}
     ${window.ghPackPanelHtml?ghPackPanelHtml():''}
     ${GH.ext&&GH.ext.src==='lex_import'?'<p class="ml-local-note">Local-only imported practice · results are saved on this device, not sent to Japanese Study or the shared vocabulary database.</p>':''}
     <div class="gh-bar">
-      <button class="btn sm ghost gh-t on" id="gh-pen" onclick="ghTool('pen')">✎ Pen</button>
-      <button class="btn sm ghost gh-t" id="gh-erase" onclick="ghTool('erase')">◌ Eraser</button>
+      <button class="btn sm ghost gh-t on" id="gh-pen" aria-pressed="${GH.tool==='pen'}" onclick="ghTool('pen')">✎ Pen</button>
+      <button class="btn sm ghost gh-t" id="gh-erase" aria-pressed="${GH.tool==='erase'}" onclick="ghTool('erase')">◌ Eraser</button>
       <button class="btn sm ghost gh-t" id="gh-width" onclick="ghWidth()">Width: M</button>
-      <button class="btn sm ghost gh-t ${GH.finger?'on':''}" id="gh-finger" onclick="ghFinger()" title="Write with your finger (page won't scroll while on)">☝ Finger</button>
+      <button class="btn sm ghost gh-t ${GH.finger?'on':''}" id="gh-finger" aria-pressed="${GH.finger}" onclick="ghFinger()" title="Write with your finger (page won't scroll while on)">☝ Finger</button>
       <button class="btn sm ghost gh-t" onclick="ghUndo()" title="Undo last stroke (two-finger tap)">↶ Undo</button>
       <span class="gh-bar-sp"></span>
       <button class="btn sm ghost gh-t gh-boxes-b ${GH.boxes?'on':''}" onclick="ghBoxes()" title="Ruled boxes instead of plain lines (B)">▦ Boxes</button>
@@ -66,16 +78,16 @@ function renderGhost(){
       <button class="btn sm ghost gh-t gh-full-btn gh-full-top" onclick="ghFull()" title="Full screen (F)">⤢</button>
     </div>
     <div class="gh-work">
-    <div class="gh-dock"><button class="gh-open" onclick="ghDrawer(true)"><span>◔ Mark &amp; save</span><span class="gh-cnt" id="gh-cnt">0 / ${GH.items.length} marked</span></button></div>
+    <div class="gh-dock"><button class="gh-open" onclick="ghDrawer(true)" aria-expanded="${GH.drawer}" aria-controls="gh-drawer-panel"><span>◔ Mark &amp; save</span><span class="gh-cnt" id="gh-cnt" role="status" aria-live="polite" aria-atomic="true">0 / ${GH.items.length} marked</span></button></div>
     <div class="gh-veil"></div>
-    <div class="gh-drawer">
+    <div class="gh-drawer" id="gh-drawer-panel" role="group" aria-label="Marking and save tools">
       <div class="gh-strip">
         <span class="gh-rail-h">Mark by</span>
         <button class="btn sm ghost gh-t gh-mk-b gh-cyc ${GH.brush===0?'on':''}" onclick="ghBrush(0)" title="Tap an item number to cycle ✓ → △ → ✗">⟳ Cycle</button>
         <button class="btn sm ghost gh-t gh-mk-b c1 ${GH.brush===1?'on':''}" onclick="ghBrush(1)">✓</button>
         <button class="btn sm ghost gh-t gh-mk-b c2 ${GH.brush===2?'on':''}" onclick="ghBrush(2)">△</button>
         <button class="btn sm ghost gh-t gh-mk-b c3 ${GH.brush===3?'on':''}" onclick="ghBrush(3)">✗</button>
-        <button class="btn sm ghost gh-t gh-more ${GH.more?'on':''}" onclick="ghMore()" title="More controls">⋯</button>
+        <button class="btn sm ghost gh-t gh-more ${GH.more?'on':''}" onclick="ghMore()" aria-expanded="${GH.more}" title="More controls">⋯</button>
         <button class="btn sm ghost gh-t gh-x" onclick="ghDrawer(false)" title="Close">✕</button>
       </div>
       <div class="gh-tally"><div class="gh-tbar"><i class="t1" id="gh-t1"></i><i class="t2" id="gh-t2"></i><i class="t3" id="gh-t3"></i></div><div class="gh-tcnt"><span id="gh-cnt2">0 / ${GH.items.length} marked</span><span id="gh-tsum"></span></div></div>
@@ -83,7 +95,7 @@ function renderGhost(){
         <button class="btn sm ghost gh-t" onclick="ghRestPass()" title="Mark every unmarked item ✓">Rest ✓</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClearMarks()">Clear marks</button>
         <button class="btn sm ghost gh-t gh-danger" onclick="ghClear()">Clear ink</button>
-        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Show key</button>
+        <button class="btn sm gh-t gh-ghost ${GH.ghost?'on':''}" id="gh-ghost" aria-pressed="${GH.ghost}" onclick="ghToggle()" title="Show the answer key faintly under your ink">◐ Show key</button>
         <button class="btn sm ghost gh-t gh-full-btn" onclick="ghFull()" title="Full screen (F)">⤢ Full screen</button>
         <button class="btn sm gh-t gh-exit" onclick="ghFull(false)">✕ Exit full screen</button>
         <button class="btn sm ghost gh-t" onclick="ghImportPanel()">目 Import</button>
@@ -323,7 +335,13 @@ function ghSetMark(id, m){
     el.textContent=['','✓','△','✗'][m];
     el.className='gh-mk '+['','ok','mid','bad'][m];
     const n=cell.querySelector('.gh-n');
-    if(n) n.className='gh-n'+(m?' m'+m:'');
+    if(n){
+      n.className='gh-n'+(m?' m'+m:'');
+      const pos=GH.items.findIndex(p=>p.id===id)+1;
+      n.setAttribute('aria-label','Item '+pos+': '+
+        (['unmarked','correct','partly correct','wrong'][m]||'unmarked')+
+        '. Press to cycle the mark.');
+    }
   }
   ghScore(); ghDraftSave();
   if(m===3&&GH.seq) ghRequeue(id);
@@ -382,21 +400,68 @@ window.ghClearMarks=async()=>{
 
 /* ---- ink ---- */
 let ghCtx,ghCv,ghCur=null;
+function ghSyncA11yControls(){
+  const toggles={
+    '#gh-pen':GH.tool==='pen','#gh-erase':GH.tool==='erase',
+    '#gh-finger':!!GH.finger,'.gh-boxes-b':!!GH.boxes,
+    '.gh-paper-b':GH.paper==='plain'
+  };
+  for(const [selector,value] of Object.entries(toggles)){
+    const el=document.querySelector(selector);
+    if(el)el.setAttribute('aria-pressed',String(value));
+  }
+  document.querySelectorAll('.gh-ghost').forEach(el=>
+    el.setAttribute('aria-pressed',String(!!GH.ghost)));
+  const dock=document.querySelector('.gh-open');
+  if(dock)dock.setAttribute('aria-expanded',String(!!GH.drawer));
+  const more=document.querySelector('.gh-more');
+  if(more)more.setAttribute('aria-expanded',String(!!GH.more));
+  document.querySelectorAll('.gh-mk-b').forEach(el=>{
+    const brush=el.classList.contains('c1')?1:
+      el.classList.contains('c2')?2:el.classList.contains('c3')?3:0;
+    el.setAttribute('aria-pressed',String(GH.brush===brush));
+  });
+}
 function ghInit(){
   ghCv=$('gh-ink'); if(!ghCv) return; ghCtx=ghCv.getContext('2d');
   ghResize();
-  ghCv.onpointerdown=e=>{ if(e.pointerType==='touch'&&!GH.finger) return; ghCv.setPointerCapture(e.pointerId); const p0=ghPos(e); const own=ghOwner(p0); ghFocus(own&&own.id); ghCur={w:GH_W[GH.wi],e:GH.tool==='erase',own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,cw:own?own.w:0,p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]}; };
-  ghCv.onpointermove=e=>{ if(!ghCur) return; ghPing();
+  // One active Pencil or finger pointer owns a stroke. Palm touches and
+  // unrelated pointer movement must not be appended to its coordinates.
+  ghCv.onpointerdown=e=>{
+    if(GH.locked||GH.savePrepared||ghCur||(e.pointerType==='touch'&&!GH.finger))return;
+    if((e.pointerType==='pen'||GH.finger)&&e.cancelable)e.preventDefault();
+    ghCv.setPointerCapture(e.pointerId);
+    const p0=ghPos(e),own=ghOwner(p0);ghFocus(own&&own.id);
+    ghCur={pointerId:e.pointerId,w:GH_W[GH.wi],e:GH.tool==='erase',
+      own:own&&own.id,ox:own?own.x:0,oy:own?own.y:0,cw:own?own.w:0,
+      p:[p0[0]-(own?own.x:0),p0[1]-(own?own.y:0)]};
+  };
+  ghCv.onpointermove=e=>{
+    if(!ghCur||e.pointerId!==ghCur.pointerId)return;
+    ghPing();
     const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
-    for(const ev of evs){ const q=ghPos(ev); ghCur.p.push(q[0]-ghCur.ox, q[1]-ghCur.oy); }
-    if(!ghRaf) ghRaf=requestAnimationFrame(()=>{ ghRaf=0; if(ghCur) ghPaintTail(ghCur); });
+    for(const ev of evs){
+      const q=ghPos(ev);ghCur.p.push(q[0]-ghCur.ox,q[1]-ghCur.oy);
+    }
+    if(!ghRaf)ghRaf=requestAnimationFrame(()=>{
+      ghRaf=0;if(ghCur)ghPaintTail(ghCur);
+    });
   };
-  ghCv.onpointerup=ghCv.onpointercancel=()=>{ if(!ghCur) return;
-    if(ghRaf){ cancelAnimationFrame(ghRaf); ghRaf=0; }
-    if(ghCur.p.length<4) ghCur.p=[ghCur.p[0],ghCur.p[1],ghCur.p[0]+.01,ghCur.p[1]]; // a tap: round caps make this a dot (濁点, 、, the dot in 犬)
-    GH.strokes.push(ghCur); ghDraftSave();
-    ghCur=null; ghRedraw();
+  const endStroke=(e,cancelled)=>{
+    if(!ghCur||e.pointerId!==ghCur.pointerId)return;
+    if(ghRaf){cancelAnimationFrame(ghRaf);ghRaf=0;}
+    const stroke=ghCur;ghCur=null;
+    if(cancelled&&stroke.p.length<4){ghRedraw();return;}
+    if(stroke.p.length<4){
+      stroke.p=[stroke.p[0],stroke.p[1],stroke.p[0]+.01,stroke.p[1]];
+    }
+    GH.strokes.push(stroke);ghDraftSave();ghRedraw();
   };
+  ghCv.onpointerup=e=>endStroke(e,false);
+  // Safari may cancel a gesture when the page scrolls or changes orientation.
+  // Preserve meaningful ink already drawn, but never manufacture a tap dot
+  // from an otherwise empty canceled gesture.
+  ghCv.onpointercancel=e=>endStroke(e,true);
   ghApplyFinger();
   ghInitUndoTap();
   document.body.classList.toggle('gh-drawer-on', !!GH.drawer);
@@ -406,6 +471,7 @@ function ghInit(){
   if(!window._ghResizeBound){ window._ghResizeBound=1; addEventListener('resize',()=>ghResize()); }
   ghInitBrush();
   ghScore();
+  ghSyncA11yControls();
   ghStartClock();
   ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
@@ -417,6 +483,7 @@ window.ghDrawer=on=>{
   GH.drawer=!!on;
   try{ localStorage.setItem('gh-drawer', GH.drawer?'1':'0'); }catch(e){}
   document.body.classList.toggle('gh-drawer-on', GH.drawer);
+  ghSyncA11yControls();
 };
 window.ghBoxes=()=>{
   GH.boxes=!GH.boxes;
@@ -424,6 +491,7 @@ window.ghBoxes=()=>{
   document.body.classList.toggle('gh-boxes', GH.boxes);
   const b=document.querySelector('.gh-boxes-b'); if(b) b.classList.toggle('on', GH.boxes);
   ghResizeSoon();   // box geometry changed, so the ink canvas has to re-fit
+  ghSyncA11yControls();
 };
 /* paper theme for the boxes: warm (default) or plain white. Purely cosmetic —
    the geometry is identical, so no canvas re-fit is needed. */
@@ -433,11 +501,13 @@ window.ghPaper=()=>{
   document.body.classList.toggle('gh-paper-plain', GH.paper==='plain');
   const b=document.querySelector('.gh-paper-b');
   if(b){ b.classList.toggle('on', GH.paper==='plain'); b.textContent = GH.paper==='plain' ? '□ Plain' : '▤ Grid'; }
+  ghSyncA11yControls();
 };
 window.ghMore=()=>{
   GH.more=!GH.more;
   document.body.classList.toggle('gh-more-on', GH.more);
   const b=document.querySelector('.gh-more'); if(b) b.classList.toggle('on', GH.more);
+  ghSyncA11yControls();
 };
 /* two-finger tap on the sheet = undo one stroke. Fires immediately, then
    repeats every 0.5s after a 0.6s hold. Cancelled by >12px of drift (that is
@@ -488,7 +558,10 @@ function ghUndoSeen(){ try{ localStorage.setItem('gh-undo-hint','1'); }catch(e){
    Pencil. Pencil always writes either way. */
 function ghApplyFinger(){
   if(ghCv) ghCv.style.touchAction = GH.finger ? 'none' : 'auto';
-  const b=$('gh-finger'); if(b) b.classList.toggle('on', !!GH.finger);
+  const b=$('gh-finger'); if(b){
+    b.classList.toggle('on', !!GH.finger);
+    b.setAttribute('aria-pressed',String(!!GH.finger));
+  }
 }
 window.ghFinger=()=>{
   GH.finger=!GH.finger;
@@ -517,7 +590,11 @@ addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement) docume
 addEventListener('orientationchange',()=>ghResizeSoon());
 addEventListener('keydown',e=>{
   if(!document.body.classList.contains('gh-view')||!$('gh-sheet')) return;
-  if(e.target&&/input|select|textarea/i.test(e.target.tagName)) return;
+  if(e.defaultPrevented||e.isComposing||document.querySelector('dialog[open]'))return;
+  if(e.target&&(
+    /input|select|textarea|button/i.test(e.target.tagName)||
+    (e.target.closest&&e.target.closest('a,[contenteditable="true"],[role="textbox"]'))
+  ))return;
   const k=e.key.toLowerCase();
   if((e.ctrlKey||e.metaKey)&&k==='z'){ e.preventDefault(); ghUndo(); return; }
   if(e.ctrlKey||e.metaKey||e.altKey) return;
@@ -566,11 +643,26 @@ function ghSeg(p,a,from){ const k=a[2]||1; ghCtx.beginPath(); ghCtx.moveTo(p[fro
 function ghStyle(s){ ghCtx.globalCompositeOperation=s.e?'destination-out':'source-over'; ghCtx.strokeStyle='#1a1a1a'; ghCtx.lineWidth=s.e?s.w*8:s.w; ghCtx.lineCap='round'; ghCtx.lineJoin='round'; }
 function ghPaint(s){ const a=ghAnchor(s); ghStyle(s); ghCtx.lineWidth*=a[2]||1; ghSeg(s.p,a,0); }
 function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
-window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
+window.ghTool=t=>{
+  GH.tool=t;
+  $('gh-pen').classList.toggle('on',t==='pen');
+  $('gh-erase').classList.toggle('on',t==='erase');
+  ghSyncA11yControls();
+};
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
-window.ghUndo=()=>{ GH.strokes.pop(); ghRedraw(); ghDraftSave(); };
-window.ghClear=async()=>{ if(GH.strokes.length&&!await ask({title:'Erase all handwriting?', body:"<p>Your marks stay. This can't be undone.</p>", ok:'Erase ink', cancel:'Keep ink', danger:true})) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
-window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-on',GH.ghost); document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost)); };
+window.ghUndo=()=>{
+  if(GH.locked||GH.savePrepared)return toast('Finish saving this sheet before editing handwriting.',4500);
+  GH.strokes.pop();ghRedraw();ghDraftSave();
+};
+window.ghClear=async()=>{
+  if(GH.locked||GH.savePrepared)return toast('Finish saving this sheet before editing handwriting.',4500);
+  if(GH.strokes.length&&!await ask({title:'Erase all handwriting?', body:"<p>Your marks stay. This can't be undone.</p>", ok:'Erase ink', cancel:'Keep ink', danger:true})) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
+window.ghToggle=()=>{
+  GH.ghost=!GH.ghost;
+  $('gh-sheet').classList.toggle('ghost-on',GH.ghost);
+  document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost));
+  ghSyncA11yControls();
+};
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
 const SRS=[0,1,2,4,8,16,30,60,120];

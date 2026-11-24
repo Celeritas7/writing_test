@@ -191,7 +191,7 @@ body.gh-marking #gh-pen,body.gh-marking #gh-erase,body.gh-marking #gh-width{opac
 
 /* 7c · one item */
 .gh-item{position:relative;padding:6px 0 108px}
-.gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
+.gh-n{position:relative;z-index:3;font:700 14px "IBM Plex Sans",sans-serif;color:inherit;border:0;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;padding:0 4px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation;appearance:none;-webkit-appearance:none}
 .gh-n:hover{background:#f1efe7}
 .gh-w{font-size:17px;border-bottom:1.5px solid var(--ink);padding-bottom:1px}
 /* meaning→カタカナ prompt: the cue is English, so it gets latin type at a
@@ -389,7 +389,7 @@ body.gh-full .gh-exit{display:inline-flex!important}
   .tbl th:nth-child(2),.tbl td:nth-child(2),.tbl th:nth-child(3),.tbl td:nth-child(3){display:none}
   .tbl td.mono{overflow-wrap:anywhere;font-size:11px}
   .step .mono{overflow-wrap:anywhere}
-  body.gh-view .main>.kicker,body.gh-view .main>h1,.gh-top,body.gh-view .main>p,body.gh-view .pillbar,.gh-inst,.gh-hd .s,.gh-hd .tt,.gh-hd .nm{display:none}
+  body.gh-view .main>.kicker,body.gh-view .main>h1,.gh-top,.gh-inst,.gh-hd .s,.gh-hd .tt,.gh-hd .nm{display:none}
   body.gh-view .main{padding:0 0 12px}
   .side .brand,.nav-item .long{display:none}
   .side .foot a{white-space:nowrap}
@@ -591,3 +591,45 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
 
 .ml-resume{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}
 .ml-resume .btn{min-height:44px}
+
+
+/* Phase 5 · Accessibility and iPad source discovery */
+.gh-source-mobile{display:none}
+@media (max-width:560px){
+  /* Desktop Ghost header is hidden at phone widths; source selection is not. */
+  body.gh-view .gh-source-mobile{display:flex;gap:8px;flex-wrap:wrap;
+    align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);
+    background:var(--bg)}
+  .gh-source-mobile .btn{min-height:44px}
+  .gh-source-mobile label{margin:0;font-size:11px;letter-spacing:0;text-transform:none}
+  .gh-source-mobile select{min-height:44px;flex:1 1 170px;min-width:0}
+  /* Japanese-source mode/filter pills and imported pack information must
+     remain accessible rather than being hidden with the desktop header. */
+  body.gh-view .pillbar{display:flex}
+  body.gh-view .ml-local-note{display:block;padding:6px 12px}
+  body.gh-view .ml-panel{display:block}
+}
+.gh-open:focus-visible,.gh-n:focus-visible,.an-section summary:focus-visible,
+.skip-to-main:focus-visible,.ml-upload input[type=file]:focus-visible{
+  outline:3px solid var(--accent);outline-offset:3px}
+#main:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.skip-to-main{position:fixed;z-index:200;top:-100px;left:12px;
+  background:var(--ink);color:#fff;border-radius:8px;padding:12px 16px;
+  font:600 14px "IBM Plex Sans",sans-serif}
+.skip-to-main:focus{top:12px}
+@media (pointer:coarse){
+  .gh-bar .btn,.gh-source-mobile .btn,.ml-actions .btn,
+  .an-toolbar .btn,.qp-controls .btn{min-height:44px}
+  .gh-source-mobile select{min-height:44px}
+}
+/* No essential content or controls depend on animations. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;
+    animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+}
+
+/* Accessible route status without creating an extra grid column. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}

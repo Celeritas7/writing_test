@@ -38,6 +38,7 @@
 </div>
 
 <div id="app" class="shell hide">
+  <button class="skip-to-main" type="button" onclick="document.getElementById('main').focus()">Skip to main study content</button>
   <aside class="side" role="navigation" aria-label="Sections">
     <div class="brand"><h3>Learning Hub</h3></div>
     <button id="nav-toggle" class="nav-toggle" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">‹</button>
@@ -51,7 +52,8 @@
     <a class="nav-item" href="#setup" data-nav="setup">Settings <span class="cnt" id="cnt-setup"></span></a>
     <div class="foot"><div id="who" class="mono" style="font-size:11px;overflow-wrap:anywhere"></div></div>
   </aside>
-  <main class="main" id="main"></main>
+  <main class="main" id="main" tabindex="-1" aria-label="Study content"></main>
+  <div class="sr-only" id="route-announcer" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>

@@ -254,13 +254,36 @@ function queue(topicId, subjectId, tiers, kinds, n){
 }
 
 /* ---------- routing ---------- */
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange',()=>{
+  route();
+  if(!LOADED)return;
+  requestAnimationFrame(()=>{
+    const target=$('main');
+    if(target){
+      try{target.focus({preventScroll:true});}catch(e){target.focus();}
+    }
+    const region=$('route-announcer');
+    if(region)region.textContent='Opened '+document.title.replace(/^Learning Hub(?: — )?/,'');
+  });
+});
 function route(){
   if(!LOADED) return;
   // phones land on the dashboard; a wide screen opens straight into the Library
   const h=(location.hash||(matchMedia('(max-width:760px)').matches?'#home':'#library')).slice(1);
   const [page,argRaw]=h.split('/'); const arg=argRaw?decodeURIComponent(argRaw):argRaw;
-  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.nav===(page==='topic'?'library':page)));
+  const active=page==='topic'?'library':page;
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const current=el.dataset.nav===active;
+    el.classList.toggle('active',current);
+    if(current)el.setAttribute('aria-current','page');
+    else el.removeAttribute('aria-current');
+  });
+  const pageTitles={home:'Home',library:'Library',quick:'Quick Practice',
+    analytics:'Learning analytics',build:'Build a batch',review:'Review',
+    ghost:'Ghost Test',setup:'Settings'};
+  const title=page==='topic'?(TOPICS.find(t=>t.id===arg)||{}).name||'Topic':
+    pageTitles[page]||'Library';
+  document.title='Learning Hub — '+title;
   const latest=latestByProblem();
   let dueN=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak'||c==='due') dueN++; }
   $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-home').setAttribute('aria-hidden','true'); $('cnt-setup').setAttribute('aria-hidden','true'); $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); document.querySelector('.nav-item[data-nav=home]').setAttribute('aria-label', dueN?'Home, '+dueN+' due':'Home'); document.querySelector('.nav-item[data-nav=setup]').setAttribute('aria-label', !DIR&&!DEMO?'Settings, iCloud folder not linked':'Settings'); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';

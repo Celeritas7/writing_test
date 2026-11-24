@@ -9,6 +9,13 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 5: iPad UI, Apple Pencil and accessibility
+
+The Ghost Test now exposes Japanese sets, language packs and Hub topics even on narrow mobile screens. The handwriting canvas isolates the active Pencil pointer from palm touches, preserves meaningful strokes when a gesture is canceled, and prevents ink changes while a save is awaiting confirmation. Numbered mark targets are native buttons for iPad VoiceOver and hardware keyboards.
+
+Navigation has a Skip-to-main control and screen-reader page announcements; Quick Practice restores focus when changing questions and revealing an answer. Touch controls and reduced-motion settings have also been improved. The installed app shell has a new service worker version; do **not** clear website data to update it.
+
+These improvements are for the **online app's iPad readiness**, not completion of offline studying. The [Phase 5 iPad acceptance checklist](docs/phase5-ipad-accessibility.md) still needs to be tested physically with Safari/VoiceOver/Apple Pencil before merging.
 ## Phase 4: multilingual handwriting packs
 
 From **Ghost Test → 🌐 Language packs**, import a public-content JSON vocabulary pack to practise Burmese, Chinese, Japanese, Malay, Marathi or other Unicode scripts using the existing Apple Pencil writing canvas. Choose **Word → meaning**, **Word → reading**, or **Meaning/reading → write word**. A downloadable Burmese sample JSON is provided in the app.
