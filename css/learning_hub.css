@@ -633,3 +633,21 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;
   padding:0!important;margin:-1px!important;overflow:hidden!important;
   clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+
+/* Phase 6 — explicit offline readiness (no cache or IndexedDB deletion) */
+.wt-offline-notice{border:1px solid var(--line);background:#f5f2e9;color:var(--soft);
+  padding:10px 14px;border-radius:10px;font-size:13px;margin:0 0 14px;
+  line-height:1.45;overflow-wrap:anywhere}
+.wt-offline-card .acts{margin:12px 0}
+.wt-offline-card .btn{min-height:44px}
+.wt-offline-status{font:600 12.5px/1.5 "IBM Plex Mono",monospace;color:var(--ink);
+  overflow-wrap:anywhere;margin-top:14px}
+.wt-offline-hint{color:var(--mute);font-size:12px;line-height:1.55}
+.study-offline .side .foot:before{content:"Offline study · local data";display:block;
+  color:var(--amber);font-size:11px;margin-bottom:6px}
+@media(max-width:760px){
+  .wt-offline-card{padding:16px}
+  .wt-offline-card .acts{gap:8px}
+  .wt-offline-card .btn{min-height:44px}
+}
