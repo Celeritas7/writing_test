@@ -69,7 +69,8 @@
   window.WTQuickLogic={select,resultRow,createSession};
 
   const owner=()=>DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id||'';
-  const key=()=>DRAFT_PREFIX+owner();
+  const draftKey=id=>DRAFT_PREFIX+id;
+  const key=()=>draftKey(owner());
   const onPage=()=>location.hash.split('/')[0]==='#quick';
   const displayTime=s=>String(Math.floor(Math.max(0,s)/60)).padStart(2,'0')+':'+
     String(Math.max(0,s)%60).padStart(2,'0');
@@ -79,13 +80,13 @@
     if(DEMO||!Q.session)return;
     Q.session.updatedAt=Date.now();
     const snapshot=JSON.parse(JSON.stringify(Q.session));
-    const storeKey=key();
+    const storeKey=draftKey(Q.session.owner);
     Q.persistChain=Q.persistChain.catch(()=>{}).then(()=>idb.set(storeKey,snapshot));
     return Q.persistChain;
   }
-  async function removeSnapshot(){
+  async function removeSnapshot(accountId){
     if(DEMO)return;
-    const storeKey=key();
+    const storeKey=draftKey(accountId||owner());
     await Q.persistChain.catch(()=>{});
     await idb.set(storeKey,null);
   }
@@ -253,7 +254,7 @@
       Q.finished={count:rows.length,right:rows.filter(r=>r.correct).length,
         weak:rows.filter(r=>!r.correct).length,minutes:s.opts.minutes,demo:DEMO};
       Q.session=null;Q.lastTick=null;
-      try{await removeSnapshot();}catch(e){toast('Results saved, but draft cleanup failed. Retrying later is safe.',7000);}
+      try{await removeSnapshot(s.owner);}catch(e){toast('Results saved, but draft cleanup failed. Retrying later is safe.',7000);}
       renderQuickPractice();
     }catch(e){
       // Persisting stable UUIDs before upload makes retries idempotent.
@@ -280,7 +281,7 @@
       body:'<p>Unsubmitted answers and ratings will be lost. Nothing already saved in Supabase is removed.</p>',
       ok:'Discard session',cancel:'Keep session',danger:true});
     if(!ok)return;
-    try{await removeSnapshot();}catch(e){toast('Cannot clear saved draft: '+(e.message||e),7000);return;}
+    try{await removeSnapshot(Q.session.owner);}catch(e){toast('Cannot clear saved draft: '+(e.message||e),7000);return;}
     Q.session=null;Q.lastTick=null;Q.finished=null;renderQuickPractice();
   }
   function applyHandlers(map){
