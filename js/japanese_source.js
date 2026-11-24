@@ -284,6 +284,7 @@ function jpRank(p){ const m=String(p.marking==null?'':p.marking).toLowerCase();
   return (p.times_wrong||0)>(p.times_correct||0)?0:2; }
 function jpUniq(rows){ jpNoteMeanings(rows); const s=new Set(); return rows.filter(r=>!s.has(r.kanji)&&s.add(r.kanji)); }
 async function jpSetItems(rows, label, seq, force){
+  if(GH.savePrepared&&!GH.locked)throw new Error('Finish retrying the interrupted Ghost Test save before opening another set.');
   GH.seq=!!seq;
   const usable=jpUniq(rows.filter(r=>r.kanji&&r.hiragana));
   if(!usable.length) throw new Error('No words with both kanji and reading in that set.');

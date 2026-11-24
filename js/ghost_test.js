@@ -106,7 +106,7 @@ const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
 window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
 function ghPanelHtml(){ return GH_PANEL&&window.jpPanelHtml ? window.jpPanelHtml() : ''; }
-window.ghSeed=async()=>{
+window.ghSeed=async()=>{ if(GH.savePrepared&&!GH.locked){toast('Retry the interrupted save first.');return;}
   const KJ=[['生える','はえる'],['六人','ろくにん'],['歩く','あるく'],['先々月','せんせんげつ'],['七人','しちにん'],['一年','いちねん'],['小学校','しょうがっこう'],['少女','しょうじょ'],['千本','せんぼん'],['あの方','あのかた'],['五万円','ごまんえん'],['先週','せんしゅう'],['上手(な)','じょうず'],['休み','やすみ'],['時間','じかん'],['のぼり','上り'],['げんき','元気'],['ちいさい','小さい'],['てま','手間'],['つぶら','円ら']];
   let sub=SUBJECTS.find(s=>GH_LANG.test(s.name));
   if(!sub){ sub={id:'language_study', name:'Language Study', sort_no:(SUBJECTS.length||0)+1};
@@ -123,7 +123,12 @@ window.ghSeed=async()=>{
   GH.topic=topic.id; ghFresh(); renderGhost();
 };
 /* fresh sheet: new marks, ink and clocks, and the post-save lock lifted */
-window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; ghDraftClear(); };
+window.ghFresh=()=>{
+  if(GH.savePrepared&&!GH.locked){toast('This sheet has an interrupted save. Retry Save results before starting another sheet.',8500);return false;}
+  GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false;
+  GH.sessionId=null; GH.attemptIds={}; GH.attemptTime=null; GH.savePrepared=false;
+  ghDraftClear(); return true;
+};
 
 /* ---- local draft ----------------------------------------------------
    Ink, marks, clocks and the loaded set go to IndexedDB (the hub's idb kv
@@ -131,11 +136,20 @@ window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.l
    7 days. Nothing leaves the device; a save or a new set clears it. */
 const GH_DRAFT_KEY='gh-draft', GH_DRAFT_TTL=7*864e5;
 let ghDraftT=0;
+/* Persist synchronously before a network write, not just the debounced
+   ordinary handwriting draft. The same session ID survives interrupted saves. */
+async function ghDraftPersist(){
+  if(GH.locked||!GH.items.length||typeof idb==='undefined') throw new Error('Local draft storage unavailable');
+  const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
+  await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
+    marks:GH.marks, strokes, time:GH.time, sessionId:GH.sessionId||null,
+    attemptIds:GH.attemptIds||{}, attemptTime:GH.attemptTime||null,
+    savePrepared:!!GH.savePrepared});
+}
 function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
   if(GH.locked||!GH.items.length||typeof idb==='undefined') return;
-  const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
-  if(!strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
-  try{ await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq, marks:GH.marks, strokes, time:GH.time}); }catch(e){}
+  if(!GH.strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
+  try{ await ghDraftPersist(); }catch(e){}
 },800); }
 function ghDraftClear(){ clearTimeout(ghDraftT); if(typeof idb!=='undefined') idb.set(GH_DRAFT_KEY,null).catch(()=>{}); }
 let ghDraftChecked=false;
@@ -144,10 +158,12 @@ async function ghDraftRestore(){
   let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
   if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
   if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
-  GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{}; GH.locked=false;
+  GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{};
+  GH.sessionId=d.sessionId||null; GH.attemptIds=d.attemptIds||{}; GH.attemptTime=d.attemptTime||null;
+  GH.savePrepared=!!d.savePrepared; GH.locked=false;
   return true;
 }
-window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
+window.ghPick=id=>{ if(ghFresh()===false)return; GH.ext=null; GH.topic=id; renderGhost(); };
 /* ---- session log: one entry per saved sheet, local to this device, so Review
    can show Japanese-database sheets (they never enter written_test_attempts)
    and offer a retry sheet built from the wrong ones. */
@@ -162,8 +178,9 @@ function ghLogSession(){
 window.ghRetrySession=i=>{
   const s=ghSessions()[i]; if(!s) return;
   const wrong=s.items.filter(x=>x.m!==1), pick=wrong.length?wrong:s.items;
+  if(ghFresh()===false)return;
   GH.ext={label:'Retry · '+s.label, src:s.src, items:pick.map((x,k)=>({...x, number:k+1, unit_no:k+1, src:s.src==='jp'?'jp':undefined}))};
-  ghFresh(); location.hash='ghost'; renderGhost();
+  location.hash='ghost'; renderGhost();
 };
 window.ghMark=(e,id)=>{
   e.stopPropagation();
@@ -252,7 +269,8 @@ async function ghLoadLimits(){
 
 /* ---- marking: tap to cycle, or arm a brush and drag across items ---- */
 function ghSetMark(id, m){
-  if(GH.locked) return;
+  if(GH.locked)return;
+  if(GH.savePrepared){toast('Save is pending — retry Save results before changing marks.',5500);return;}
   GH.marks[id]=m;
   const cell=document.querySelector('.gh-item[data-gid="'+String(id).replace(/"/g,'\\"')+'"]');
   if(cell){
@@ -301,12 +319,14 @@ function ghInitBrush(){
 }
 /* fill only the UNMARKED items — never overwrites a ✗ or △ you set */
 window.ghRestPass=()=>{
+  if(GH.savePrepared){toast('Save pending — marks cannot change until retry completes.',5000);return;}
   let n=0;
   for(const p of GH.items) if(!GH.marks[p.id]){ ghSetMark(p.id, 1); n++; }
   toast(n ? n+' unmarked '+(n===1?'item':'items')+' marked ✓' : 'Every item is already marked', 2200);
 };
 /* wipe every mark, with a warning. Ink is untouched. */
 window.ghClearMarks=async()=>{
+  if(GH.savePrepared){toast('Save pending — keep your marks and retry Save results.',6000);return;}
   const n=Object.keys(GH.marks).filter(k=>GH.marks[k]).length;
   if(!n) return toast('No markings to clear', 1800);
   if(!await ask({title:'Clear all '+n+' marks?', body:"<p>Your handwriting stays. This can't be undone.</p>", ok:'Clear marks', cancel:'Keep marks', danger:true})) return;
@@ -524,17 +544,21 @@ function srsNext(prev, rating, slow){
   if((prev.wrong_count||0)+(rating<3?1:0)>=5) step=Math.min(step,2);   // leech cap: max 4 days
   return {step, lapses, halved, days:SRS[step]||1};
 }
-async function jpUpdateReviews(log, url, key){
+async function jpUpdateReviews(log, url, key, sessionId){
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
   const list=log.map(r=>r.kanji);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
   const q=await fetch(`${url}/rest/v1/japanese_user_reviews?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,direction,correct_count,wrong_count,user_id,history,step,lapses,seconds`,{headers:H});
-  const have=q.ok?await q.json():[];
+  if(!q.ok){ const b=await q.json().catch(()=>({})); throw new Error('Review read failed: '+(b.message||'HTTP '+q.status)); }
+  const have=await q.json();
   const byK={}; for(const r of have) byK[ghRK(r.kanji,r.direction||'read')]=r;
   const today=new Date(), iso=today.toISOString();
   const plan=[];
   const rows=log.map(l=>{
     const prev=byK[ghRK(l.kanji,l.direction)]||{};
+    /* An uncertain response may have committed already. A retry must not
+       increment counters a second time for the same saved sheet. */
+    if((Array.isArray(prev.history)?prev.history:[]).some(h=>h&&h.sid===sessionId)) return null;
     const slow=!!l.is_correct && (l.seconds||0) > ghSlowLimit(prev);
     const s=srsNext(prev, l.rating, slow);
     plan.push({kanji:l.kanji, direction:l.direction, seconds:l.seconds||0, days:Math.max(1,s.days), slow, halved:!!s.halved});
@@ -542,12 +566,12 @@ async function jpUpdateReviews(log, url, key){
     const row={kanji:l.kanji, direction:l.direction, last_review:iso, next_review:next, last_rating:l.rating, updated_at:iso, step:s.step, lapses:s.lapses,
       seconds:Math.max(0, l.seconds|0),
       correct_count:(prev.correct_count||0)+(l.is_correct?1:0), wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
-      history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0}].slice(-20)};
+      history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0, sid:sessionId}].slice(-20)};
     /* user_id is text NOT NULL with no default — a new word 400s without it */
     row.user_id=jpUser()||prev.user_id||l.user_id||ghWho();
     if(prev.id!=null) row.id=prev.id;
     return row;
-  });
+  }).filter(Boolean);
   await jpPostSplit(`${url}/rest/v1/japanese_user_reviews`, H, rows);
   return plan;
 }
@@ -558,7 +582,8 @@ async function jpUpdateMarkings(items, url, key, who){
   if(!items.length) return 0;
   const inList='('+items.map(i=>'"'+String(i.kanji).replace(/"/g,'')+'"').join(',')+')';
   const q=await fetch(`${url}/rest/v1/japanese_user_markings?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,marking,user_id`,{headers:H});
-  const have=q.ok?await q.json():[];
+  if(!q.ok){ const b=await q.json().catch(()=>({})); throw new Error('Marking read failed: '+(b.message||'HTTP '+q.status)); }
+  const have=await q.json();
   const byK={}; for(const r of have) byK[r.kanji]=r;
   const iso=new Date().toISOString();
   const rows=items.map(it=>{
@@ -589,28 +614,49 @@ let GH_SAVING=false;
 window.ghSave=async()=>{
   if(GH_SAVING) return;
   const sbtn=document.querySelector('.gh-save'); GH_SAVING=true; if(sbtn){ sbtn.disabled=true; sbtn.textContent='Saving…'; }
-  try{ await ghSaveNow(); } finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
+  try{ await ghSaveNow(); } catch(e){ toast('Save not confirmed — handwriting kept. '+(e.message||e),8000); } finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
 };
 async function ghSaveNow(){
   const log_n=n=>n+' result'+(n===1?'':'s')+' marked';
+  GH.attemptIds=GH.attemptIds||{};
+  GH.attemptTime=GH.attemptTime||new Date().toISOString();
   const rows=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
-    return {problem_id:p.id, topic_id:p.topic_id, correct:m===1, rating:m===1?5:m===2?3:1, notes:m===1?'Ghost check: matched the key.':m===2?'Ghost check: partly right — compare stroke/reading against the key.':'Ghost check: did not match the key.', graded_by:'ghost', graded_at:new Date().toISOString()}; });
+    if(!GH.attemptIds[p.id]) GH.attemptIds[p.id]=crypto.randomUUID();
+    return {id:GH.attemptIds[p.id], problem_id:p.id, topic_id:p.topic_id,
+      correct:m===1, rating:m===1?5:m===2?3:1,
+      notes:m===1?'Ghost check: matched the key.':m===2?'Ghost check: partly right — compare stroke/reading against the key.':'Ghost check: did not match the key.',
+      graded_by:'ghost', graded_at:GH.attemptTime,
+      ...(!DEMO&&SESSION?{user_id:SESSION.user.id}:{})}; });
   if(!rows.length){ toast('Mark at least one item first.'); return; }
   if(GH.locked) return;
   const unmarked=GH.items.length-rows.length;
-  if(unmarked){
+  if(unmarked&&!GH.savePrepared){
     const a=await ask({title:unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked', body:'<p>Unmarked items are not saved. Mark the rest ✓, save only the '+rows.length+' you marked, or go back.</p>', ok:'Mark rest ✓ and save', alt:'Save '+rows.length+' only', cancel:'Go back'});
     if(!a) return;
     if(a===true){ ghRestPass(); return ghSaveNow(); }
   }
   const hub=!GH.ext||GH.ext.src==='hub';
-  if(!DEMO&&hub){ const {error}=await sb.from('written_test_attempts').insert(rows); if(error){ toast('Save failed: '+error.message,6000); return; } }
-  if(hub) ATTEMPTS=rows.concat(ATTEMPTS);
-  let extra='', plan=null;
   const c=ghCfg();
-  const logTable=(GH_PANEL&&$('jp-log')?$('jp-log').value.trim():c.log);
   const jpKeyNow=(typeof JP!=='undefined'&&JP.key)||c.key;
   const jpUrlNow=(typeof JP!=='undefined'&&JP.url)||c.url;
+  /* Do not treat a skipped Japanese connection as a successful save. */
+  if(!hub&&!DEMO&&(!jpKeyNow||!jpUrlNow||!jpUser()||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jpUser()))){
+    toast('Japanese results NOT saved — check the project URL, key and user ID. Your writing is kept.',8500);return;
+  }
+  GH.sessionId=GH.sessionId||crypto.randomUUID();
+  GH.savePrepared=true;
+  try{await ghDraftPersist();}
+  catch(e){GH.savePrepared=false; toast('Cannot save a safety copy on this device. Nothing sent; check storage. '+e.message,8500);return;}
+  if(!DEMO&&hub){
+    /* Client-generated attempt IDs make a retry safe when the previous
+       request succeeded on the server but its response was lost. */
+    const {error}=await sb.from('written_test_attempts').upsert(rows,{onConflict:'id'});
+    if(error){toast('Save failed — sheet kept for retry: '+error.message,8000);return;}
+  }
+  if(hub) ATTEMPTS=rows.concat(ATTEMPTS);
+  let extra='', plan=null;
+  const logTable=(GH_PANEL&&$('jp-log')?$('jp-log').value.trim():c.log);
   if(!hub&&!DEMO&&jpUrlNow&&jpKeyNow){
     const today=ghDay();
     const log=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
@@ -622,7 +668,7 @@ async function ghSaveNow(){
         acc[i].seconds=s;                                    // longest time wins
         return acc; },[]);
     try{
-      plan=await jpUpdateReviews(log, jpUrlNow, jpKeyNow);
+      plan=await jpUpdateReviews(log, jpUrlNow, jpKeyNow, GH.sessionId);
       extra=' · japanese_user_reviews updated';
       const halved=(plan||[]).filter(x=>x.halved);
       if(halved.length) extra+=' · '+halved.length+' slow ✓ at half interval ('+halved.map(x=>x.days+'d').join(', ')+')';
@@ -631,8 +677,8 @@ async function ghSaveNow(){
         if(i<0) acc.push({kanji:k, pass}); else acc[i].pass=acc[i].pass&&pass;
         return acc; },[]);
       if(writes.length){
-        try{ const n=await jpUpdateMarkings(writes, jpUrlNow, jpKeyNow, c.user||ghWho()); extra+=' · '+n+' かな→漢字 rating'+(n===1?'':'s'); }
-        catch(e){ extra+=' (rating write failed: '+(e.message||e)+')'; }
+        const n=await jpUpdateMarkings(writes, jpUrlNow, jpKeyNow, jpUser());
+        extra+=' · '+n+' かな→漢字 rating'+(n===1?'':'s');
       }
       if(logTable){
         try{
@@ -642,19 +688,15 @@ async function ghSaveNow(){
         }catch(e){}
       }
     }catch(e){
-      extra=' · reviews upsert failed ('+(e.message||e)+')';
-      let logged=false;
-      try{
-        const r=await fetch(`${jpUrlNow}/rest/v1/japanese_daily_test_log`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log.map(({seconds, ...r})=>r))});
-        logged=r.ok;
-        extra += r.ok ? ' — saved to japanese_daily_test_log instead. Run sql/reviews_direction.sql.'
-                      : ' — NOT SAVED. Run sql/reviews_direction.sql.';
-      }catch(e2){ extra+=' — NOT SAVED.'; }
-      if(!logged){ toast('Save failed'+extra+' — your sheet is kept; check the connection and press Save results again.', 8000); return; }
+      /* Never clear the draft or downgrade to a different log table when a
+         review write has an uncertain outcome. Retry with the same session ID. */
+      toast('Japanese save incomplete ('+(e.message||e)+'). Sheet kept; retry with the same marks.',9500);
+      return;
     }
-  } else if(!hub&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
+  }
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
-  ghDraftClear(); // the results are in the database now; nothing left to resume
+  GH.savePrepared=false;
+  ghDraftClear(); // essential review + marking writes were acknowledged
   if(!DEMO) ghLogSession();
   const end=ghEnding(plan);
   if(!end){ ghExit(); return; }
