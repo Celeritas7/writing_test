@@ -661,7 +661,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#analytics">Learning trends</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#setup">Study offline</a><a class="btn sm ghost" href="#analytics">Learning trends</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
@@ -788,14 +788,14 @@ function renderReview(){
   const fb=shown.map(e=>{
     if(e.kind==='fb'){ const a=e.a, p=PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}, t=TOPICS.find(x=>x.id===a.topic_id)||{};
       return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" role="link" tabindex="0" onclick="location.hash='topic/${esc(a.topic_id||'')}'" onkeydown="if(event.key==='Enter')this.click()" title="Open ${esc(t.name||'topic')}">
-        <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${stars(a.rating)}
+        <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${a.pending_local?'<span class="chip due">Saved locally · pending sync</span>':''}${stars(a.rating)}
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${fmtDate(a.graded_at)}</span></div>
         ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
         ${a.correct?'':`<div class="acts"><button class="btn sm ghost" onclick="event.stopPropagation();practise('${esc(a.topic_id)}')">Practise again</button></div>`}</div>`; }
     if(e.kind==='ghost'){ const n=e.items.length, right=e.items.filter(a=>a.correct).length, wrong=e.items.filter(a=>!a.correct);
       const names=wrong.map(a=>esc((PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}).subtitle)).join(' · ');
       return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}" role="link" tabindex="0" onclick="ghPick('${esc(e.topic_id)}');location.hash='ghost'" onkeydown="if(event.key==='Enter')this.click()" title="Open this sheet in the ghost test">
-        <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>
+        <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>${e.items.some(a=>a.pending_local)?'<span class="chip due">Saved locally · pending sync</span>':''}
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">ghost · ${fmtDate(e.graded_at)}</span></div>
         <div class="notes">${wrong.length?'To review: '+names:'Every word right.'}</div></div>`; }
     const s=e.s, wrong=s.items.filter(x=>x.m!==1);
@@ -810,9 +810,9 @@ function renderReview(){
   const tPills=[['all','All topics'],...tids.map(id=>[id,topicName(id)||id])].map(([id,name])=>`<button class="pill-t ${REV.topic===id?'on':''}" aria-pressed="${REV.topic===id}" onclick="REV.topic='${esc(id)}';REV.limit=30;renderReview()">${esc(name)}</button>`).join('');
   const bsel=REV.batch!=='all'?`<button class="pill-t on" onclick="REV.batch='all';renderReview()" title="Clear batch filter">batch: ${esc((BATCHES.find(x=>x.id===REV.batch)||{}).filename||'?')} ✕</button>`:'';
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
-    <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
+    <p style="color:var(--mute);margin:0 0 18px">Cowork feedback and self-checked practice appear here. ${ATTEMPTS.some(a=>a.pending_local)?'<strong>Some results are saved locally and not yet synced.</strong>':''} Tap a batch to see its problems.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
-    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
+    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO||OFFLINE_MODE?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
     <div style="margin:0 0 14px"><a class="btn sm ghost" href="#analytics">View learning analytics</a></div>
     <h2 style="margin:0 0 8px">Feedback</h2>
     <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
