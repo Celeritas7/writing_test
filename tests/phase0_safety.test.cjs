@@ -68,6 +68,18 @@ test('invalid Japanese user ID is rejected',async()=>{
   const save=updater(async()=>({ok:true,json:async()=>[]}),async()=>{},'invalid');
   await assert.rejects(save([entry('花')],'https://example.invalid','test-key','sheet-1'),/valid Japanese user_id/);
 });
+test('missing Japanese credentials keep the sheet and show a warning',async()=>{
+  const code=ghost.slice(ghost.indexOf('async function ghSaveNow(){'),ghost.indexOf('/* Exit:'));
+  const gh={items:[{id:'jp-1',topic_id:'jp',prompt:'花',answer:'はな'}],
+    marks:{'jp-1':1},ext:{src:'jp'},locked:false};
+  const messages=[];
+  const run=new Function('GH','toast','GH_PANEL','ghCfg','JP','DEMO',
+    code+'\nreturn ghSaveNow;')(gh,(s)=>messages.push(s),false,
+      ()=>({key:'',url:'',log:''}),{},false);
+  await run();
+  assert.equal(gh.locked,false);
+  assert.match(messages.join(' '),/NOT saved/);
+});
 test('student fallback downloads the answer-free manifest, never the key',()=>{
   assert.match(hub,/download\(new Blob\(\[manifest\]/);
   assert.doesNotMatch(hub,/if\(!written\)\s*\{[^}]*download\(new Blob\(\[key\]/);
