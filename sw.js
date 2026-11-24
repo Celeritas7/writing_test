@@ -7,11 +7,11 @@
      exact version, so a cached copy is never stale.
    - Supabase and everything else: never touched. Data always comes live;
      offline, the app shows its own "Couldn't load your data" card. */
-const VERSION = 'lh-v2';
+const VERSION = 'lh-v2-phase1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest',
   'css/learning_hub.css',
-  'js/learning_hub.js', 'js/ghost_test.js', 'js/japanese_source.js',
+  'js/worksheet_handoff.js', 'js/learning_hub.js', 'js/ghost_test.js', 'js/japanese_source.js',
   'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'
 ];
 const PINNED = [
