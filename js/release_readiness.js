@@ -144,9 +144,11 @@
           Math.round(estimate.usage/1048576*10)/10:null;
         if(typeof storage.persisted==='function')
           persistent=await storage.persisted()?'persistent':'not-guaranteed';
-        add('storage','Browser storage estimate','pass',
+        add('storage','Browser storage estimate',
+          persistent==='persistent'?'pass':'warn',
           'Used '+(usedMB??'unknown')+' MB; quota '+(quotaMB??'unknown')+
-          ' MB; persistence '+persistent);
+          ' MB; persistence '+persistent+
+          '. Keep private backups outside website storage');
       }catch(e){add('storage','Browser storage estimate','warn',
         'Storage estimate unavailable on this browser');}
     }else add('storage','Browser storage estimate','warn',
