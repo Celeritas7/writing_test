@@ -123,28 +123,42 @@ window.ghSeed=async()=>{
   GH.topic=topic.id; ghFresh(); renderGhost();
 };
 /* fresh sheet: new marks, ink and clocks, and the post-save lock lifted */
-window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; ghDraftClear(); };
+window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false; GH.saveId=null; ghDraftClear(); };
 
 /* ---- local draft ----------------------------------------------------
    Ink, marks, clocks and the loaded set go to IndexedDB (the hub's idb kv
    store) a second after each change, and come back on the next visit for
    7 days. Nothing leaves the device; a save or a new set clears it. */
 const GH_DRAFT_KEY='gh-draft', GH_DRAFT_TTL=7*864e5;
-let ghDraftT=0;
-function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
-  if(GH.locked||!GH.items.length||typeof idb==='undefined') return;
+let ghDraftT=0, ghDraftWrites=Promise.resolve();
+/* Serialize draft writes: an in-flight autosave must never restore an older
+   sheet after a successful save has cleared it. */
+function ghDraftWrite(value){
+  ghDraftWrites=ghDraftWrites.catch(()=>{}).then(()=>{
+    if(typeof idb==='undefined') throw new Error('Offline draft storage is unavailable');
+    return idb.set(GH_DRAFT_KEY,value);
+  });
+  return ghDraftWrites;
+}
+async function ghPersistDraft(){
+  if(GH.locked||!GH.items.length) return;
   const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
   if(!strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
-  try{ await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq, marks:GH.marks, strokes, time:GH.time}); }catch(e){}
-},800); }
-function ghDraftClear(){ clearTimeout(ghDraftT); if(typeof idb!=='undefined') idb.set(GH_DRAFT_KEY,null).catch(()=>{}); }
+  return ghDraftWrite({ts:Date.now(),topic:GH.topic,ext:GH.ext,seq:!!GH.seq,
+    marks:{...GH.marks},strokes,time:{...GH.time},saveId:GH.saveId||null});
+}
+function ghDraftSave(){
+  clearTimeout(ghDraftT);
+  ghDraftT=setTimeout(()=>{ghPersistDraft().catch(()=>{});},800);
+}
+function ghDraftClear(){ clearTimeout(ghDraftT); return ghDraftWrite(null).catch(()=>{}); }
 let ghDraftChecked=false;
 async function ghDraftRestore(){
   if(ghDraftChecked||typeof idb==='undefined') return false; ghDraftChecked=true;
   let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
   if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
   if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
-  GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{}; GH.locked=false;
+  GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{}; GH.saveId=d.saveId||null; GH.locked=false;
   return true;
 }
 window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
@@ -524,33 +538,51 @@ function srsNext(prev, rating, slow){
   if((prev.wrong_count||0)+(rating<3?1:0)>=5) step=Math.min(step,2);   // leech cap: max 4 days
   return {step, lapses, halved, days:SRS[step]||1};
 }
-async function jpUpdateReviews(log, url, key){
+/* An attempt ID is saved in the draft before the first network write. If a
+   request succeeds on the server but the response is lost, retry re-reads the
+   existing history and does not increment the counters twice. */
+async function jpUpdateReviews(log, url, key, saveId){
+  const owner=jpUser();
+  if(!saveId) throw new Error('Missing stable sheet ID');
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(owner))
+    throw new Error('Choose a valid Japanese user_id before saving');
   const H={apikey:key, Authorization:'Bearer '+key, 'Content-Type':'application/json'};
-  const list=log.map(r=>r.kanji);
+  const list=[...new Set(log.map(r=>r.kanji))];
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
   const q=await fetch(`${url}/rest/v1/japanese_user_reviews?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,direction,correct_count,wrong_count,user_id,history,step,lapses,seconds`,{headers:H});
-  const have=q.ok?await q.json():[];
+  if(!q.ok){
+    const body=await q.json().catch(()=>({}));
+    throw new Error('Could not check existing Japanese results: '+(body.message||('HTTP '+q.status)));
+  }
+  const have=await q.json();
+  if(!Array.isArray(have)) throw new Error('Japanese reviews returned an invalid response');
   const byK={}; for(const r of have) byK[ghRK(r.kanji,r.direction||'read')]=r;
-  const today=new Date(), iso=today.toISOString();
-  const plan=[];
-  const rows=log.map(l=>{
+  const iso=new Date().toISOString();
+  const plan=[],rows=[];
+  for(const l of log){
     const prev=byK[ghRK(l.kanji,l.direction)]||{};
-    const slow=!!l.is_correct && (l.seconds||0) > ghSlowLimit(prev);
-    const s=srsNext(prev, l.rating, slow);
-    plan.push({kanji:l.kanji, direction:l.direction, seconds:l.seconds||0, days:Math.max(1,s.days), slow, halved:!!s.halved});
-    const next=ghDayPlus(Math.max(1,s.days));
-    const row={kanji:l.kanji, direction:l.direction, last_review:iso, next_review:next, last_rating:l.rating, updated_at:iso, step:s.step, lapses:s.lapses,
-      seconds:Math.max(0, l.seconds|0),
-      correct_count:(prev.correct_count||0)+(l.is_correct?1:0), wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
-      history:[...(Array.isArray(prev.history)?prev.history:[]), {d:l.test_date, r:l.rating, s:l.seconds||0, w:slow?1:0}].slice(-20)};
-    /* user_id is text NOT NULL with no default — a new word 400s without it */
-    row.user_id=jpUser()||prev.user_id||l.user_id||ghWho();
+    if(Array.isArray(prev.history)&&prev.history.some(h=>h&&h.sid===saveId)){
+      plan.push({kanji:l.kanji,direction:l.direction,days:Math.max(1,SRS[prev.step]||1),alreadySaved:true});
+      continue;
+    }
+    const slow=!!l.is_correct && (l.seconds||0)>ghSlowLimit(prev);
+    const next=srsNext(prev,l.rating,slow), days=Math.max(1,next.days);
+    plan.push({kanji:l.kanji,direction:l.direction,seconds:l.seconds||0,days,slow,halved:!!next.halved});
+    const row={kanji:l.kanji,direction:l.direction,last_review:iso,next_review:ghDayPlus(days),
+      last_rating:l.rating,updated_at:iso,step:next.step,lapses:next.lapses,
+      seconds:Math.max(0,l.seconds|0),
+      correct_count:(prev.correct_count||0)+(l.is_correct?1:0),
+      wrong_count:(prev.wrong_count||0)+(l.is_correct?0:1),
+      history:[...(Array.isArray(prev.history)?prev.history:[]),
+        {d:l.test_date,r:l.rating,s:l.seconds||0,w:slow?1:0,sid:saveId}].slice(-20),
+      user_id:owner};
     if(prev.id!=null) row.id=prev.id;
-    return row;
-  });
-  await jpPostSplit(`${url}/rest/v1/japanese_user_reviews`, H, rows);
+    rows.push(row);
+  }
+  await jpPostSplit(`${url}/rest/v1/japanese_user_reviews`,H,rows);
   return plan;
 }
+
 /* かな→kanji (written recall) also drives the 1–5 rating in japanese_user_markings:
    pass → first-two band (2 if unmarked), fail → last-three band (5 if unmarked) */
 async function jpUpdateMarkings(items, url, key, who){
@@ -589,7 +621,9 @@ let GH_SAVING=false;
 window.ghSave=async()=>{
   if(GH_SAVING) return;
   const sbtn=document.querySelector('.gh-save'); GH_SAVING=true; if(sbtn){ sbtn.disabled=true; sbtn.textContent='Saving…'; }
-  try{ await ghSaveNow(); } finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
+  try{ await ghSaveNow(); }
+  catch(e){toast('Save failed — sheet retained: '+(e.message||e),8000);}
+  finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
 };
 async function ghSaveNow(){
   const log_n=n=>n+' result'+(n===1?'':'s')+' marked';
@@ -611,7 +645,18 @@ async function ghSaveNow(){
   const logTable=(GH_PANEL&&$('jp-log')?$('jp-log').value.trim():c.log);
   const jpKeyNow=(typeof JP!=='undefined'&&JP.key)||c.key;
   const jpUrlNow=(typeof JP!=='undefined'&&JP.url)||c.url;
-  if(!hub&&!DEMO&&jpUrlNow&&jpKeyNow){
+  if(!hub&&!DEMO){
+    if(!jpUrlNow||!jpKeyNow){
+      toast('Japanese results NOT saved — check Connection settings. Your handwriting is preserved.',8000);
+      return;
+    }
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jpUser())){
+      toast('Japanese results NOT saved — set a valid Japanese user_id. Your sheet is preserved.',8000);
+      return;
+    }
+    GH.saveId=GH.saveId||(crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+Math.random());
+    try{await ghPersistDraft();}
+    catch(e){toast('Could not protect this sheet locally — no results sent. '+(e.message||e),8000);return;}
     const today=ghDay();
     const log=GH.items.filter(p=>GH.marks[p.id]).map(p=>{ const m=GH.marks[p.id];
       return {user_id:c.user||ghWho(), kanji:p.kanji||p.prompt, direction:ghDirOf(p), test_type:c.type||'ghost', test_date:today, is_correct:m===1, rating:m===1?5:m===2?3:1, seconds:ghSeconds(p.id)}; })
@@ -622,7 +667,7 @@ async function ghSaveNow(){
         acc[i].seconds=s;                                    // longest time wins
         return acc; },[]);
     try{
-      plan=await jpUpdateReviews(log, jpUrlNow, jpKeyNow);
+      plan=await jpUpdateReviews(log, jpUrlNow, jpKeyNow, GH.saveId);
       extra=' · japanese_user_reviews updated';
       const halved=(plan||[]).filter(x=>x.halved);
       if(halved.length) extra+=' · '+halved.length+' slow ✓ at half interval ('+halved.map(x=>x.days+'d').join(', ')+')';
@@ -642,19 +687,15 @@ async function ghSaveNow(){
         }catch(e){}
       }
     }catch(e){
-      extra=' · reviews upsert failed ('+(e.message||e)+')';
-      let logged=false;
-      try{
-        const r=await fetch(`${jpUrlNow}/rest/v1/japanese_daily_test_log`,{method:'POST',headers:{apikey:jpKeyNow,Authorization:'Bearer '+jpKeyNow,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(log.map(({seconds, ...r})=>r))});
-        logged=r.ok;
-        extra += r.ok ? ' — saved to japanese_daily_test_log instead. Run sql/reviews_direction.sql.'
-                      : ' — NOT SAVED. Run sql/reviews_direction.sql.';
-      }catch(e2){ extra+=' — NOT SAVED.'; }
-      if(!logged){ toast('Save failed'+extra+' — your sheet is kept; check the connection and press Save results again.', 8000); return; }
+      /* A partial batch may already have committed. Keep the stable sheet ID
+         and draft so a retry can detect completed review rows and skip them. */
+      toast('Japanese reviews not fully saved ('+(e.message||e)+'). Sheet retained; retry when connected.',8000);
+      return;
     }
-  } else if(!hub&&!DEMO){ extra=' · Japanese save skipped: add the anon key (JP_ANON_KEY in ghost_test.js)'; }
+  }
+
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
-  ghDraftClear(); // the results are in the database now; nothing left to resume
+  await ghDraftClear(); // only clear after the primary result write is confirmed
   if(!DEMO) ghLogSession();
   const end=ghEnding(plan);
   if(!end){ ghExit(); return; }
