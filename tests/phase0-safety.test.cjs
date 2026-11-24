@@ -61,7 +61,8 @@ test('Durable draft stores retry IDs, marks and pencil strokes',async()=>{
         strokes:[{w:1,e:false,own:'x',ox:0,oy:0,p:[[0.5,0.5]]}],
         time:{x:8},sessionId:'stable',attemptIds:{x:'uuid-1'},
         attemptTime:'2026-11-24',savePrepared:true},
-      idb:{set:async(_key,entry)=>{saved=entry;}},GH_DRAFT_KEY:'gh-draft'
+      idb:{set:async(_key,entry)=>{saved=entry;}},GH_DRAFT_KEY:'gh-draft',
+      ghCurrentDraftKey:()=> 'gh-draft'
     });
   await fn();
   assert.equal(saved.sessionId,'stable');

@@ -9,6 +9,13 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 4: multilingual handwriting packs
+
+From **Ghost Test → 🌐 Language packs**, import a public-content JSON vocabulary pack to practise Burmese, Chinese, Japanese, Malay, Marathi or other Unicode scripts using the existing Apple Pencil writing canvas. Choose **Word → meaning**, **Word → reading**, or **Meaning/reading → write word**. A downloadable Burmese sample JSON is provided in the app.
+
+Imported vocabulary and practice marks stay **on this device, scoped to your signed-in account**; evidence can be exported as a private JSON file. Existing Japanese Ghost Test, Hub problems, PDF worksheets and Quick Practice remain unchanged. Multilingual practice does **not** write progress into Technical Supabase, the Japanese project or the Shared Vocabulary Foundation.
+
+The portable `wt-writing-pack-v1` and future `lex-v1-public-export` contracts preserve source identifiers without merging homographs. The F1A/F1B Shared Vocabulary schema is not deployed to the connected Technical production DB and no secure cross-project vocabulary adapter is available yet; account mapping, RLS review and F1C/F2 approval are prerequisites for true cross-app synchronization. See [Phase 4 contracts and iPad acceptance](docs/phase4-multilingual-writing-packs.md).
 ## Phase 3: Learning analytics
 
 From **Home → Learning trends** (or the desktop **Analytics** sidebar), see 7-, 30-, and 90-day activity, per-topic coverage, current weak/due questions and repeated mistakes. Cowork-graded, Quick Practice self-rated, and Hub Ghost Test results are shown separately—self-ratings are not treated as equivalent to independent grading. Each focus item can open a related practice topic or worksheet.
@@ -48,6 +55,7 @@ Full acceptance checklist: [docs/phase1-worksheet-grading.md](docs/phase1-worksh
 | **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
 | **Analytics** | 7/30/90-day source-separated learning trends, current focus questions, coverage by topic, and downloadable summary reports. |
 | **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
+| **Multilingual packs** | Script-neutral Apple Pencil writing from imported JSON vocabulary, with separate local-only evidence and private export. No automatic cross-project sync. |
 | **Settings** | **Account** first (who is signed in, Sign out, Install app), then the loop, folder link / reconnect and grader instructions. |
 
 On phones the sections are a bottom tab bar; on wider screens they are the left sidebar.
@@ -63,6 +71,8 @@ css/learning_hub.css       all styles (responsive rules in §8)
 js/learning_hub.js         auth, data, Home / Library / Build / Review / Settings, PDF export
 js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/quick_practice.js     timed self-rating, draft recovery, safe attempt syncing
+js/multilingual_core.js   portable vocabulary import format and evidence contract
+js/multilingual_packs.js  local per-account packs, handwriting mode picker, export
 js/learning_analytics.js  data-only calculations: dates, methods, repeated mistakes
 js/analytics_view.js      analytics charts, filters, refresh, reports and practice actions
 js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log

@@ -15,11 +15,26 @@ function renderGhost(){
     <div class="card" style="max-width:640px"><p style="margin:0 0 10px">Ghost test is for <b>language study</b> — word ⇄ reading pairs you write by hand.</p>
     <p style="color:var(--mute);margin:0 0 14px;font-size:13.5px">Pick a set from your Japanese database, or seed a local topic.</p>
     <button class="btn sm" onclick="ghImportPanel()">Browse my Japanese database</button>
-    <button class="btn sm ghost" onclick="ghSeed()">Create “Kanji · Certi/Diploma” with 20 items</button></div>${ghPanelHtml()}`; return; }
-  if(!GH.ext&&(!GH.topic||!tops.some(t=>t.id===GH.topic))){ GH.topic=tops[0].id; GH.marks={}; GH.strokes=[]; }
+    <button class="btn sm ghost" onclick="ghSeed()">Create “Kanji · Certi/Diploma” with 20 items</button>
+    <button class="btn sm ghost" onclick="ghToggleLanguagePacks()">🌐 Multilingual packs</button></div>${ghPanelHtml()}${window.ghPackPanelHtml?ghPackPanelHtml():''}`; return; }
+  if(GH.ext&&GH.ext.src==='lex_import'&&
+     GH.ext.owner!==(DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id)){
+    GH.ext=null; GH.marks={};GH.strokes=[];
+    toast('Imported writing sheet belongs to another account and was not opened.',6500);
+    return renderGhost();
+  }
+  if(!GH.ext&&(!GH.topic||!tops.some(t=>t.id===GH.topic))){
+    if(!tops.length){
+      $('main').innerHTML='<div class="card">No Hub language topics. Open Multilingual packs to import a writing set.</div>';
+      return;
+    }
+    GH.topic=tops[0].id; GH.marks={}; GH.strokes=[];
+  }
   const label = GH.ext ? GH.ext.label : (TOPICS.find(x=>x.id===GH.topic)||{}).name;
   GH.items = GH.ext ? GH.ext.items : PROBLEMS.filter(p=>p.topic_id===GH.topic&&p.answer).sort((a,b)=>(a.unit_no||a.number)-(b.unit_no||b.number)).slice(0,20);
-  const pills=[`<button class="pill-t ${GH.ext?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`].concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).join('');
+  const pills=[`<button class="pill-t ${GH.ext&&GH.ext.src!=='lex_import'?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`,
+    `<button class="pill-t ${GH.ext&&GH.ext.src==='lex_import'?'on':''}" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>`]
+    .concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).join('');
   const firstRev=GH.items.findIndex(p=>p.rev);
   const cells=GH.items.map((p,i)=>{
     const m=GH.marks[p.id]||0;
@@ -28,11 +43,16 @@ function renderGhost(){
   const nRev=GH.items.filter(p=>p.rev).length, nFwd=GH.items.length-nRev;
   const nMean=GH.items.filter(p=>p.mean).length;
   const meanNote=nMean?`　·　${nMean} in English = meaning→カタカナ`:'';
-  const inst = (nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
+  const inst = GH.ext&&GH.ext.src==='lex_import'
+    ? (window.WTMultiCore.MODES[GH.ext.mode]||'Write your answer')+
+      ' · '+GH.ext.language+' · show the reference answer using Show key'
+    : (nRev&&nFwd ? `1–${nFwd}　漢字→ひらがな (read)　　${nFwd+1}–${GH.items.length}　ひらがな→漢字 (write)`
     : nRev ? 'ひらがな→漢字 (write) · ghost overlay shows the key in red'
     : 'Write your answer under each item · ghost overlay shows the key in red')+meanNote;
   $('main').innerHTML=`<div class="gh-top"><div class="gh-title"><div class="kicker">Ghost test</div><h1>Write on screen</h1></div><div class="pillbar">${pills}</div></div>
     ${ghPanelHtml()}
+    ${window.ghPackPanelHtml?ghPackPanelHtml():''}
+    ${GH.ext&&GH.ext.src==='lex_import'?'<p class="ml-local-note">Local-only imported practice · results are saved on this device, not sent to Japanese Study or the shared vocabulary database.</p>':''}
     <div class="gh-bar">
       <button class="btn sm ghost gh-t on" id="gh-pen" onclick="ghTool('pen')">✎ Pen</button>
       <button class="btn sm ghost gh-t" id="gh-erase" onclick="ghTool('erase')">◌ Eraser</button>
@@ -135,13 +155,22 @@ window.ghFresh=()=>{
    store) a second after each change, and come back on the next visit for
    7 days. Nothing leaves the device; a save or a new set clears it. */
 const GH_DRAFT_KEY='gh-draft', GH_DRAFT_TTL=7*864e5;
+const GH_LEX_DRAFT_KEY=id=>'gh-draft-lex-'+id;
+function ghCurrentDraftKey(){
+  if(GH.ext&&GH.ext.src==='lex_import'){
+    const owner=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+    if(!owner||GH.ext.owner!==owner)throw Error('Cannot save another account\'s imported draft');
+    return GH_LEX_DRAFT_KEY(owner);
+  }
+  return GH_DRAFT_KEY;
+}
 let ghDraftT=0;
 /* Persist synchronously before a network write, not just the debounced
    ordinary handwriting draft. The same session ID survives interrupted saves. */
 async function ghDraftPersist(){
   if(GH.locked||!GH.items.length||typeof idb==='undefined') throw new Error('Local draft storage unavailable');
   const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
-  await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
+  await idb.set(ghCurrentDraftKey(),{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
     marks:GH.marks, strokes, time:GH.time, sessionId:GH.sessionId||null,
     attemptIds:GH.attemptIds||{}, attemptTime:GH.attemptTime||null,
     savePrepared:!!GH.savePrepared});
@@ -151,12 +180,28 @@ function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
   if(!GH.strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
   try{ await ghDraftPersist(); }catch(e){}
 },800); }
-function ghDraftClear(){ clearTimeout(ghDraftT); if(typeof idb!=='undefined') idb.set(GH_DRAFT_KEY,null).catch(()=>{}); }
+function ghDraftClear(){
+  clearTimeout(ghDraftT);
+  if(typeof idb!=='undefined'){
+    try{ idb.set(ghCurrentDraftKey(),null).catch(()=>{}); }catch(e){}
+  }
+}
 let ghDraftChecked=false;
 async function ghDraftRestore(){
   if(ghDraftChecked||typeof idb==='undefined') return false; ghDraftChecked=true;
-  let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
+  let d=null;
+  try{
+    d=await idb.get(GH_DRAFT_KEY); // preserve the existing Japanese/Hub resume path
+    if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL){
+      const id=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+      if(id)d=await idb.get(GH_LEX_DRAFT_KEY(id));
+    }
+  }catch(e){}
   if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
+  if(d.ext&&d.ext.src==='lex_import'){
+    const current=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+    if(!current||d.ext.owner!==current)return false; // never display another learner's imported sheet
+  }
   if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
   GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{};
   GH.sessionId=d.sessionId||null; GH.attemptIds=d.attemptIds||{}; GH.attemptTime=d.attemptTime||null;
@@ -257,7 +302,7 @@ function ghClock(id){
 async function ghLoadLimits(){
   GH.limit={};
   const c=ghCfg(), url=(typeof JP!=='undefined'&&JP.url)||c.url, key=(typeof JP!=='undefined'&&JP.key)||c.key;
-  if(DEMO||!GH.ext||!url||!key||!GH.items.length) return;
+  if(DEMO||!GH.ext||GH.ext.src==='lex_import'||!url||!key||!GH.items.length) return;
   const list=GH.items.map(ghKeyOf).filter(Boolean);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
   try{
@@ -634,6 +679,34 @@ async function ghSaveNow(){
     const a=await ask({title:unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked', body:'<p>Unmarked items are not saved. Mark the rest ✓, save only the '+rows.length+' you marked, or go back.</p>', ok:'Mark rest ✓ and save', alt:'Save '+rows.length+' only', cancel:'Go back'});
     if(!a) return;
     if(a===true){ ghRestPass(); return ghSaveNow(); }
+  }
+  /* Imported lex-v1 compatible packs are intentionally device-only until
+     a verified shared identity and approved evidence API exist. */
+  if(GH.ext&&GH.ext.src==='lex_import'){
+    const current=DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id;
+    if(!current||GH.ext.owner!==current||!window.WTMulti){
+      toast('Imported pack owner does not match this account. No data saved.',7500);return;
+    }
+    GH.sessionId=GH.sessionId||crypto.randomUUID();
+    GH.attemptTime=GH.attemptTime||new Date().toISOString();
+    GH.savePrepared=true;
+    try{
+      if(!DEMO)await ghDraftPersist();
+      await WTMulti.saveGhostEvidence();
+    }catch(e){
+      toast('Local save incomplete; handwriting kept for retry: '+(e.message||e),9000);
+      return;
+    }
+    GH.savePrepared=false;
+    ghDraftClear();
+    if(!DEMO)ghLogSession();
+    toast(DEMO?'Demo writing results kept in memory only':
+      'Writing results saved on this device only. Export them from Language packs.',7000);
+    const end=ghEnding(null);
+    if(!end){ghExit();return;}
+    GH.locked=true; $('gh-sheet').classList.add('locked'); ghDrawer(true);
+    ghShowEnding(end);
+    return;
   }
   const hub=!GH.ext||GH.ext.src==='hub';
   const c=ghCfg();
