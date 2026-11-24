@@ -166,6 +166,11 @@
         if(seen.has(a.id))return false;
         seen.add(a.id);return true;
       });
+      if(window.WTOffline&&SESSION&&SESSION.user.id===currentOwner){
+        const pending=await WTOffline.queuedAttempts(currentOwner);
+        const ids=new Set(pending.map(r=>r.id));
+        ATTEMPTS=[...pending,...ATTEMPTS.filter(r=>!ids.has(r.id))];
+      }
       STATE.complete=true;STATE.refreshedAt=Date.now();
     }catch(err){STATE.error='Refresh incomplete. Previously loaded results were kept. '+(err.message||err);}
     finally{STATE.busy=false;if(active())window.renderAnalytics();}
