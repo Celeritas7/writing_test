@@ -117,9 +117,9 @@
       '<div class="an-topics">'+topics(data)+'</div></section></div>'+
       '<p class="an-muted an-footnote">Report window: '+e(data.period.start)+' – '+
       e(data.period.end)+'. Repeated misses always use 90 days. No answer keys or private grader files are exported.</p>';
-    $id('an-subject').addEventListener('change',ev=>{STATE.subject=ev.target.value;renderAnalytics();});
+    $id('an-subject').addEventListener('change',ev=>{STATE.subject=ev.target.value;window.renderAnalytics();});
     document.querySelectorAll('.an-period').forEach(b=>b.addEventListener('click',()=>{
-      STATE.days=Number(b.dataset.days);renderAnalytics();
+      STATE.days=Number(b.dataset.days);window.renderAnalytics();
     }));
     document.querySelectorAll('.an-topic-practice').forEach(b=>b.addEventListener('click',()=>{
       if(typeof window.quickPracticeFor==='function')window.quickPracticeFor(b.dataset.topic,b.dataset.mode||'due');
@@ -141,7 +141,7 @@
     if(STATE.busy||DEMO||!SESSION)return;
     const currentOwner=SESSION.user.id,rows=[];
     STATE.busy=true;STATE.error=null;
-    if(active())renderAnalytics();
+    if(active())window.renderAnalytics();
     try{
       const pageSize=500,limit=10000;
       for(let offset=0;offset<limit;offset+=pageSize){
@@ -161,7 +161,7 @@
       if(!SESSION||SESSION.user.id!==currentOwner)throw new Error('Account changed during refresh');
       ATTEMPTS=rows;STATE.complete=true;STATE.refreshedAt=Date.now();
     }catch(err){STATE.error='Refresh incomplete. Previously loaded results were kept. '+(err.message||err);}
-    finally{STATE.busy=false;if(active())renderAnalytics();}
+    finally{STATE.busy=false;if(active())window.renderAnalytics();}
   }
   window.refreshAnalytics=refreshAnalytics;
 })();
