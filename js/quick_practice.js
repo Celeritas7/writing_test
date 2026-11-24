@@ -253,7 +253,7 @@
       if(!DEMO){
         const offline=typeof window!=='undefined'&&window.WTOffline;
         const queuedJob={id:'quick-'+s.id,owner:s.owner,kind:'quick',
-          createdAt:new Date(s.startedAt).toISOString(),rows};
+          createdAt:new Date(s.startedAt||Date.now()).toISOString(),rows};
         if(offline&&window.WTOffline.shouldQueue()){
           await window.WTOffline.queue(queuedJob);
           savedLocally=true;
