@@ -808,6 +808,16 @@ async function exportBatchNow(q, m){
   const artifacts=await WTWorksheet.manifests({batchId,userId:DEMO?'demo':SESSION.user.id,
     createdAt:now.toISOString(),filename:fname,questions:q});
   const manifest=artifacts.student, key=artifacts.grader;
+  // A student file must not be published without a tracked batch.
+  const batchRow={id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,
+    problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()};
+  if(!DEMO){
+    const {error}=await sb.from('written_test_batches').insert({
+      id:batchId,topic_id:batchRow.topic_id,problem_ids:batchRow.problem_ids,filename:fname
+    });
+    if(error)throw new Error('Batch tracking failed; no student files exported. '+error.message);
+  }
+  BATCHES.unshift(batchRow);
   let dest='downloaded', written=false;
   if(DIR){
     try{
@@ -823,16 +833,13 @@ async function exportBatchNow(q, m){
     }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
   }
   if(!written){
+    LAST_STUDENT_EXPORT={filename:fname,pdf:blob,manifestName:jname,manifest};
+    GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
     download(blob, fname);
     download(new Blob([manifest],{type:'application/json'}), jname); // student-safe: no answer fields
-    GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
-    LAST_STUDENT_EXPORT={filename:fname,pdf:blob,manifestName:jname,manifest};
     dest='student files requested for download; use separate buttons if Safari blocks a file';
   } else {GRADER_KEY_PENDING=null; LAST_STUDENT_EXPORT=null;}
-  if(!DEMO){
-    const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
-    if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
-  } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
+
   m.className='msg ok';
   m.textContent=`${fname} → ${dest}. Solve the PDF on your iPad and save it into solved/.`;
   const oldStudent=$('student-download-actions'); if(oldStudent)oldStudent.remove();
