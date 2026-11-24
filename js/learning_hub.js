@@ -18,7 +18,7 @@ function uniqueId(name, taken){ let base=slug(name)||('x'+Date.now().toString(36
 const ORPHAN='__unsorted';
 function subjectOf(t){ return SUBJECTS.some(s=>s.id===t.subject_id)?t.subject_id:(t.subject_id?ORPHAN:(SUBJECTS[0]||{}).id); }
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
-let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
+let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5, paper:(()=>{try{return localStorage.getItem('wt-paper')==='letter'?'letter':'a4';}catch(e){return 'a4';}})()};
 let OPEN_SUBS=null;
 
 /* ---------- tiny IndexedDB for the folder handle ---------- */
@@ -477,6 +477,9 @@ function renderBuild(){
         <div><label>Tiers <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${tierPills}</div></div>
         <div><label>Kinds <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${kindPills}</div></div>
         <div><label>Count <span class="hint">· 1–20</span></label><input type="number" min="1" max="20" value="${buildSel.count}" style="width:80px" onchange="buildSel.count=Math.min(20,Math.max(1,parseInt(this.value)||5));renderBuild()"></div>
+        <div><label for="wt-paper-size">Paper size</label><select id="wt-paper-size" onchange="buildSel.paper=this.value;try{localStorage.setItem('wt-paper',this.value);}catch(e){};renderBuild()">
+          <option value="a4" ${buildSel.paper==='a4'?'selected':''}>A4 (Japan)</option>
+          <option value="letter" ${buildSel.paper==='letter'?'selected':''}>US Letter</option></select></div>
       </div>
     </div>
     <div class="plist">${rows}</div>
@@ -708,15 +711,16 @@ async function exportBatchNow(q, m){
   const stamp=`${now.getFullYear()}${two(now.getMonth()+1)}${two(now.getDate())}_${two(now.getHours())}${two(now.getMinutes())}`; // local time, matches the Review table
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');
   const fname=`WT_${topicSlug}_${stamp}.pdf`;
-  const batchId=(crypto.randomUUID&&crypto.randomUUID())||String(now.getTime());
+  if(!crypto.randomUUID) throw new Error('Secure connection required for batch IDs');
+  const batchId=crypto.randomUUID();
   if(!DIR&&DIR_PENDING) await reconnectDir(); // still inside the click's user activation
   const blob=await makePdf(q, fname, batchId);
   const jname=fname.replace(/\.pdf$/,'.json');
-  const prob=x=>({id:x.p.id, topic_id:x.p.topic_id, number:x.p.number, subtitle:x.p.subtitle, prompt:x.p.prompt, given_data:x.p.given_data||null, tier:x.p.tier, kind:x.p.kind, picked_because:x.why});
-  const head={batch_id:batchId, user_id:DEMO?'demo':SESSION.user.id, created_at:now.toISOString(), filename:fname};
-  // outbox/ syncs to the iPad next to the sheet, so it never carries answers; grader/ holds the full key
-  const manifest=JSON.stringify({...head, problems:q.map(prob)}, null, 2);
-  const key=JSON.stringify({...head, problems:q.map(x=>({...prob(x), answer:x.p.answer||null, worked:x.p.worked||null}))}, null, 2);
+  // Student and private grader payloads are created by the same versioned contract.
+  // A stable grade attempt ID enables retry-safe Cowork grading and batch verification.
+  const artifacts=await WTWorksheet.manifests({batchId,userId:DEMO?'demo':SESSION.user.id,
+    createdAt:now.toISOString(),filename:fname,questions:q});
+  const manifest=artifacts.student, key=artifacts.grader;
   let dest='downloaded', written=false;
   if(DIR){
     try{
