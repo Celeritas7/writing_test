@@ -560,3 +560,31 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
   .an-overview .tile .big{font-size:29px}
   .an-toolbar .btn{min-height:44px}
 }
+
+
+/* Phase 4 · script-neutral multilingual Ghost Test vocabulary packs */
+.ml-panel{margin:12px 0 18px;max-width:1000px}
+.ml-heading,.ml-pack-title,.ml-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ml-heading{justify-content:space-between;align-items:flex-start}
+.ml-heading h2{font-size:18px;margin:0 0 4px}
+.ml-sub{font-size:12.5px;line-height:1.5;color:var(--mute);margin:7px 0;overflow-wrap:anywhere}
+.ml-upload{border:1px dashed var(--line);border-radius:10px;padding:14px;margin:16px 0}
+.ml-upload input[type=file]{display:block;width:100%;max-width:100%;box-sizing:border-box;font-size:14px}
+.ml-packs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ml-pack{border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0;background:var(--card)}
+.ml-pack-title b{font-size:14px;overflow-wrap:anywhere}
+.ml-actions{margin-top:10px}
+.ml-actions .btn{min-height:40px;white-space:normal;text-align:left}
+.ml-export{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.ml-local-note{font-size:12px;color:var(--amber);line-height:1.5;margin:4px 0 12px}
+.gh-item .gh-w,.gh-item .gh-g{font-family:"IBM Plex Sans","Noto Sans","Noto Sans CJK JP","Noto Sans Myanmar",sans-serif;overflow-wrap:anywhere}
+@media(max-width:820px){
+  .ml-panel{margin:12px 12px 18px}
+  .ml-pack{padding:10px}
+}
+@media(max-width:560px){
+  .ml-packs{grid-template-columns:1fr}
+  .ml-panel{padding:12px;margin:10px 8px 14px}
+  .ml-heading{align-items:center}
+  .ml-actions .btn{min-height:44px}
+}
