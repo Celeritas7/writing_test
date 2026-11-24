@@ -156,7 +156,8 @@ test('device diagnostic UI is read-only and can export a safe summary',()=>{
   assert.match(hub,/window\.runIpadDiagnostics=async/);
   assert.match(hub,/window\.exportIpadDiagnostics=/);
   assert.match(hub,/WTRelease\.audit\(/);
-  assert.match(hub,/sensitiveFieldsIncluded/); // check source references metadata?
+  assert.match(hub,/LAST_IPAD_DIAGNOSTIC/);
+  assert.match(hub,/JSON.stringify\(report,null,2\)/);
 });
 test('source modules parse without a build step',()=>{
   assert.doesNotThrow(()=>new Function(core));
