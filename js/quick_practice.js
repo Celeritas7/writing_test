@@ -260,6 +260,20 @@
       toast('Results NOT synced. Your saved session is intact: '+(e.message||e),8000);
     }finally{Q.busy=false;renderQuickPractice();}
   }
+  async function backupPending(){
+    const s=Q.session;
+    if(!s||s.phase!=='pending'){toast('No pending results to export.');return;}
+    const ok=await ask({title:'Export a private backup of unsynced results?',
+      body:'<p>The JSON includes your self-ratings and any typed answers. Keep it private. This does NOT sync results or clear the pending session.</p>',
+      ok:'Export private backup',cancel:'Not now'});
+    if(!ok)return;
+    const payload={format:'wt-quick-backup-v1',session_id:s.id,owner:s.owner,
+      created_at:new Date(s.startedAt).toISOString(),
+      rows:s.items.map(i=>resultRow(i,s.owner,s.opts)).filter(Boolean)};
+    const name='WT_quick_pending_'+String(s.id).slice(0,8)+'.json';
+    download(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),name);
+    toast('Backup downloaded. Keep it private; results are still pending.');
+  }
   async function discard(){
     if(!Q.session)return;
     const ok=await ask({title:'Discard this practice session?',
@@ -322,7 +336,8 @@
       item.skipped?'Skipped':'Not rated';
     const phase=pending?[
       '<p class="msg err">The results are not confirmed in Supabase. Your answers are preserved on this device. Retry when connected.</p>',
-      '<button class="btn" id="qp-retry" '+(Q.busy?'disabled':'')+'>Retry save</button>'
+      '<button class="btn" id="qp-retry" '+(Q.busy?'disabled':'')+'>Retry save</button>',
+      '<button class="btn sm ghost" id="qp-backup">Export pending backup</button>'
     ].join(''):[
       '<div class="qp-controls"><button class="btn sm ghost" id="qp-pause" '+(s.expired?'disabled':'')+'>'+
         (s.expired?'Time up':s.paused?'Resume':'Pause')+'</button>',
@@ -367,7 +382,7 @@
       'qp-pause':()=>{if(s.expired)return; if(s.paused){s.paused=false;Q.lastTick=Date.now();saveSnapshot().catch(()=>{});}else pause(false);renderQuickPractice();},
       'qp-back':()=>move(-1),'qp-next':()=>move(1),'qp-skip':skip,'qp-reveal':reveal,
       'qp-mark-5':()=>grade(5),'qp-mark-3':()=>grade(3),'qp-mark-1':()=>grade(1),
-      'qp-end':endSession,'qp-retry':endSession,'qp-discard':discard
+      'qp-end':endSession,'qp-retry':endSession,'qp-backup':backupPending,'qp-discard':discard
     });
     if(!pending){if(!s.paused&&Q.lastTick==null)Q.lastTick=Date.now();startTimer();}
   }
