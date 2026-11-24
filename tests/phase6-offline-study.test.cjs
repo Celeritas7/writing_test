@@ -79,7 +79,7 @@ function rig(){
     JSON.stringify(session):null};
   const navigator={onLine:true,serviceWorker:{controller:{}}};
   const env={
-    window:{indexedDB:idb},indexedDB:idb,navigator,localStorage,caches,
+    window:{indexedDB:idb,caches},indexedDB:idb,navigator,localStorage,caches,
     location:{href:'https://example.test/app/index.html'},URL:FakeURL,
     fetch:async(url)=>{
       fetched.push(url);
