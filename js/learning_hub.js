@@ -851,7 +851,7 @@ function renderSetup(){
         <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':OFFLINE_MODE?'Lock offline access':'Sign out'}</button>
         ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
       </div>
-      ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
+      ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen. Open it online and download your study pack before going offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. Open that app online and download a study pack before disconnecting.</p>':''}
     </div>
     <div class="card wt-offline-card" style="margin:0 0 18px" aria-label="Study offline">
       <h2 style="margin:0 0 6px">Study offline on iPad</h2>
