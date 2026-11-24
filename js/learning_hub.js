@@ -737,14 +737,17 @@ window.refreshFeedback=async()=>{
       sb.from('written_test_batches').select('*').order('created_at',{ascending:false})
     ]);
     if(a.error||b.error)throw a.error||b.error;
-    ATTEMPTS=a.data||[];BATCHES=b.data||[];
+    let nextAttempts=a.data||[];
     if(window.WTOffline&&SESSION){
       try{
         const waiting=await WTOffline.queuedAttempts(SESSION.user.id);
         const ids=new Set(waiting.map(r=>r.id));
-        ATTEMPTS=[...waiting,...ATTEMPTS.filter(r=>!ids.has(r.id))];
-      }catch(e){toast('Pending local results could not be read: '+e.message,6000);}
+        nextAttempts=[...waiting,...nextAttempts.filter(r=>!ids.has(r.id))];
+      }catch(e){
+        throw Error('Local pending results unreadable; previous feedback retained: '+e.message);
+      }
     }
+    ATTEMPTS=nextAttempts;BATCHES=b.data||[];
     BATCH_COVERAGE={};
     renderReview();toast('Feedback and batch status refreshed.');
   }catch(e){toast('Refresh failed; existing feedback kept: '+(e.message||e),6500);}
@@ -1318,8 +1321,11 @@ function maybeAutoSync(){
   setTimeout(()=>{
     if(OFFLINE_MODE||!LOADED||!window.WTOfflineSync)return;
     WTOfflineSync.autoSyncIfEnabled().then(result=>{
-      if(result&&result.synced&&location.hash==='#setup'){
-        updateOfflineStatus();updateSyncDashboard();
+      if(result&&result.synced){
+        if(location.hash==='#setup'){updateOfflineStatus();updateSyncDashboard();}
+        else if(location.hash==='#review')renderReview();
+        else if(location.hash==='#analytics'&&window.renderAnalytics)renderAnalytics();
+        else if(location.hash==='#home')renderHome();
         toast('Automatically verified '+result.synced+' Hub/Quick sessions.',6000);
       }
     }).catch(e=>{
