@@ -486,7 +486,13 @@ function renderBuild(){
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
       <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
-    </div><div id="exp-msg" class="msg"></div>${GRADER_KEY_PENDING?`<div id="grd-pending-action" style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
+    </div><div id="exp-msg" class="msg"></div>
+    ${LAST_STUDENT_EXPORT?`<div id="student-download-actions" class="acts" style="margin-top:10px">
+      <span style="font-size:12px;color:var(--mute)">${esc(LAST_STUDENT_EXPORT.filename)} — download again if iPad Safari blocked a file:</span>
+      <button class="btn sm ghost" onclick="redownloadStudentFile('pdf')">PDF again</button>
+      <button class="btn sm ghost" onclick="redownloadStudentFile('manifest')">Student manifest again</button>
+    </div>`:''}
+    ${GRADER_KEY_PENDING?`<div id="grd-pending-action" style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
@@ -746,7 +752,13 @@ async function writeText(dirHandle, name, text){
 }
 
 /* ---------- export ---------- */
-let EXPORTING=false, GRADER_KEY_PENDING=null;
+let EXPORTING=false, GRADER_KEY_PENDING=null, LAST_STUDENT_EXPORT=null;
+window.redownloadStudentFile=kind=>{
+  const x=LAST_STUDENT_EXPORT;
+  if(!x){toast('Export a worksheet first.');return;}
+  if(kind==='pdf')download(x.pdf,x.filename);
+  else if(kind==='manifest')download(new Blob([x.manifest],{type:'application/json'}),x.manifestName);
+};
 /* Grader keys contain answers. Download them separately and only after
    explicit confirmation, never beside student-facing PDF/manifest by default. */
 window.downloadGraderKey=async()=>{
@@ -803,14 +815,26 @@ async function exportBatchNow(q, m){
     download(blob, fname);
     download(new Blob([manifest],{type:'application/json'}), jname); // student-safe: no answer fields
     GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
-    dest='PDF + student manifest downloaded; grader key held separately';
-  } else GRADER_KEY_PENDING=null;
+    LAST_STUDENT_EXPORT={filename:fname,pdf:blob,manifestName:jname,manifest};
+    dest='student files requested for download; use separate buttons if Safari blocks a file';
+  } else {GRADER_KEY_PENDING=null; LAST_STUDENT_EXPORT=null;}
   if(!DEMO){
     const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
     if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   m.className='msg ok';
   m.textContent=`${fname} → ${dest}. Solve the PDF on your iPad and save it into solved/.`;
+  const oldStudent=$('student-download-actions'); if(oldStudent)oldStudent.remove();
+  if(LAST_STUDENT_EXPORT){
+    const actions=document.createElement('div'); actions.id='student-download-actions'; actions.className='acts';
+    actions.style.marginTop='10px';
+    actions.append(document.createTextNode('If Safari blocked a file, download it separately:'));
+    for(const [kind,label] of [['pdf','PDF again'],['manifest','Student manifest again']]){
+      const b=document.createElement('button');b.className='btn sm ghost';b.textContent=label;
+      b.addEventListener('click',()=>redownloadStudentFile(kind));actions.appendChild(b);
+    }
+    m.insertAdjacentElement('afterend',actions);
+  }
   const oldButton=$('grd-pending-action'); if(oldButton)oldButton.remove();
   if(GRADER_KEY_PENDING){
     m.append(document.createTextNode(' Private answers were NOT included in student downloads.'));
