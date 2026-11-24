@@ -651,3 +651,18 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
   .wt-offline-card .acts{gap:8px}
   .wt-offline-card .btn{min-height:44px}
 }
+
+
+/* Phase 7 · explicit sync and conservative recovery */
+.wt-sync-panel{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+.wt-sync-panel h3{font-size:15px;line-height:1.4}
+.wt-sync-panel .acts{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.wt-sync-option{display:flex;align-items:center;gap:10px;min-height:44px;
+  font-family:"IBM Plex Sans",sans-serif;font-size:13px;letter-spacing:normal;
+  text-transform:none;color:var(--soft);cursor:pointer;margin:8px 0}
+.wt-sync-option input{width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)}
+#sync-status{margin-top:8px;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:560px){
+  .wt-sync-panel .btn{min-height:44px}
+  .wt-sync-option{align-items:flex-start}
+}
