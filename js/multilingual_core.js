@@ -47,7 +47,7 @@
     rows.forEach((r,index)=>{
       if(!plain(r))throw Error('Record '+(index+1)+' is not an object');
       const lex=data.format===LEX;
-      const rawId=lex?r.source_pk||r.form_id||r.entry_id||r.id:r.id;
+      const rawId=lex?r.id||r.sense_id||r.form_id||r.source_pk||r.entry_id:r.id;
       const id=required(rawId,'Record '+(index+1)+' ID',200);
       const form=required(lex?r.form_text:r.form,'Record '+(index+1)+' written form',250);
       const reading=optional(lex?(r.reading||r.transliteration):r.reading,250);
@@ -61,12 +61,13 @@
       const formId=optional(lex?r.form_id:(r.source&&r.source.form_id),120);
       const senseId=optional(lex?r.sense_id:(r.source&&r.source.sense_id),120);
       const script=optional(lex?r.script_code:r.script,40);
+      const sourcePkType=optional(lex?r.source_pk_type:(r.source&&r.source.pk_type),40);
       const duplicate=[sourceProject,sourceApp,sourceTable,id].join('\u0001');
       if(keys.has(duplicate))throw Error('Duplicate source identifier in pack: '+id);
       keys.add(duplicate);
       normalized.push({id,form,reading,meaning,script,
         provenance:{source_project:sourceProject,source_app:sourceApp,
-          source_table:sourceTable,source_pk:sourceId||id,entry_id:entryId,
+          source_table:sourceTable,source_pk:sourceId||id,source_pk_type:sourcePkType,entry_id:entryId,
           form_id:formId,sense_id:senseId}});
     });
     return {format:FORMAT,original_format:data.format,language_code:lang,
