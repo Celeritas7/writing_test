@@ -542,9 +542,9 @@ function renderHome(){
         <div class="sub">${jpReadyNow?(jp.streak?'Writing sheets on consecutive days.':'Write a sheet today to start one.'):'Counted from your Japanese sheets once the database is connected.'}</div>
       </div>
       <div class="tile">
-        <div class="kicker">Accuracy · 7 days</div>
+        <div class="kicker">Correct marks · 7 days</div>
         <div class="big">${acc==null?'—':acc+'<small>%</small>'}</div>
-        <div class="sub">${n?`${ok} right of ${n} answers`:'No graded work this week yet.'}</div>
+        <div class="sub">${n?`${ok} correct of ${n} recorded marks`:'No marks recorded this week yet.'} · Mixed assessment methods. <a href="#analytics">See separate trends</a>.</div>
       </div>
       <div class="tile wide">
         <div class="kicker">Last sheet</div>
