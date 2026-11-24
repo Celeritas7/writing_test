@@ -262,6 +262,7 @@ function loadError(msg){
 }
 window.boot=boot;
 async function boot(){
+  if(OFFLINE_MODE)return; // a late online reply must not replace an opened offline sheet
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
   $('main').innerHTML='<p style="color:var(--mute);margin-top:20px">Loading…</p>';
   $('who').textContent = whoText();
@@ -273,6 +274,7 @@ async function boot(){
       sb.from('written_test_batches').select('*').order('created_at',{ascending:false}),
       sb.from('written_test_subjects').select('*').order('sort_no')
     ]);
+    if(OFFLINE_MODE)return; // offline fallback may have started during the requests
     const bad=[t,p,a].find(r=>r.error);
     if(bad){
       if((!navigator.onLine||isOfflineNetworkError(bad.error.message))&&await offlineEntry())return;
