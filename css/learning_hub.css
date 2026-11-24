@@ -191,7 +191,7 @@ body.gh-marking #gh-pen,body.gh-marking #gh-erase,body.gh-marking #gh-width{opac
 
 /* 7c · one item */
 .gh-item{position:relative;padding:6px 0 108px}
-.gh-n{position:relative;z-index:3;font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation}
+.gh-n{position:relative;z-index:3;font:700 14px "IBM Plex Sans",sans-serif;color:inherit;border:0;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:44px;padding:0 4px;margin:-8px -2px -8px -8px;border-radius:6px;touch-action:manipulation;appearance:none;-webkit-appearance:none}
 .gh-n:hover{background:#f1efe7}
 .gh-w{font-size:17px;border-bottom:1.5px solid var(--ink);padding-bottom:1px}
 /* meaning→カタカナ prompt: the cue is English, so it gets latin type at a
