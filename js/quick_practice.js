@@ -56,7 +56,17 @@
         (reply?'\nLearner response: '+reply:'')
     };
   }
-  window.WTQuickLogic={select,resultRow};
+  function createSession(items,opts,user,uuid,now=Date.now()){
+    return {id:uuid(),owner:user,startedAt:now,updatedAt:now,
+      opts:{...opts},phase:'active',remainingSec:opts.minutes*60,
+      paused:false,expired:false,cursor:0,
+      items:items.map(p=>({
+        id:p.id,topic_id:p.topic_id,subtitle:p.subtitle,prompt:p.prompt,answer:p.answer||'',
+        worked:p.worked||'',given_data:p.given_data||'',response:'',revealed:false,
+        skipped:false,grade:null,ratedAt:null,attemptId:uuid()
+      }))};
+  }
+  window.WTQuickLogic={select,resultRow,createSession};
 
   const owner=()=>DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id||'';
   const key=()=>DRAFT_PREFIX+owner();
@@ -89,8 +99,12 @@
       if(draft&&draft.owner===current&&Array.isArray(draft.items)&&
         Date.now()-(draft.updatedAt||draft.startedAt||0)<MAX_AGE){
         Q.session=draft;
-        if(Q.session.phase==='active')Q.session.paused=true;
-        Q.session.items.forEach(i=>{i.response=String(i.response||'');});
+        if(!Q.session.items.length){Q.session=null;}
+        else {
+          Q.session.cursor=Math.max(0,Math.min(Q.session.items.length-1,Number(Q.session.cursor)||0));
+          if(Q.session.phase==='active')Q.session.paused=true;
+          Q.session.items.forEach(i=>{i.response=String(i.response||'');});
+        }
       }
     }catch(e){Q.loadError='Could not read your saved practice: '+(e.message||e);}
     finally{
@@ -163,20 +177,15 @@
     const {chosen}=pickOpts();
     if(!chosen.length){toast('No questions match this practice mode and subject.',5500);return;}
     if(!window.crypto||!crypto.randomUUID){toast('A secure browser connection is required for safe practice IDs.');return;}
-    const next={
-      id:crypto.randomUUID(),owner:owner(),startedAt:Date.now(),updatedAt:Date.now(),
-      opts:{...Q.opts},phase:'active',remainingSec:Q.opts.minutes*60,
-      paused:false,expired:false,cursor:0,
-      items:chosen.map(p=>({
-        id:p.id,topic_id:p.topic_id,subtitle:p.subtitle,prompt:p.prompt,answer:p.answer||'',
-        worked:p.worked||'',given_data:p.given_data||'',response:'',revealed:false,
-        skipped:false,grade:null,ratedAt:null,attemptId:crypto.randomUUID()
-      }))
-    };
+    const next=createSession(chosen,Q.opts,owner(),()=>crypto.randomUUID());
     Q.busy=true;
     try{
       // Do not destroy the existing draft unless the replacement is durably stored.
-      if(!DEMO)await idb.set(key(),JSON.parse(JSON.stringify(next)));
+      if(!DEMO){
+        // Finish any in-flight autosave of the old session before replacing it.
+        await Q.persistChain.catch(()=>{});
+        await idb.set(key(),JSON.parse(JSON.stringify(next)));
+      }
       Q.session=next;Q.finished=null;Q.lastTick=Date.now();renderQuickPractice();
     }catch(e){toast('Cannot store a new practice session: '+(e.message||e),6500);}
     finally{Q.busy=false;}
@@ -249,8 +258,7 @@
     }catch(e){
       // Persisting stable UUIDs before upload makes retries idempotent.
       toast('Results NOT synced. Your saved session is intact: '+(e.message||e),8000);
-      renderQuickPractice();
-    }finally{Q.busy=false;}
+    }finally{Q.busy=false;renderQuickPractice();}
   }
   async function discard(){
     if(!Q.session)return;
@@ -316,8 +324,8 @@
       '<p class="msg err">The results are not confirmed in Supabase. Your answers are preserved on this device. Retry when connected.</p>',
       '<button class="btn" id="qp-retry" '+(Q.busy?'disabled':'')+'>Retry save</button>'
     ].join(''):[
-      '<div class="qp-controls"><button class="btn sm ghost" id="qp-pause">'+
-        (s.paused&&!s.expired?'Resume':'Pause')+'</button>',
+      '<div class="qp-controls"><button class="btn sm ghost" id="qp-pause" '+(s.expired?'disabled':'')+'>'+
+        (s.expired?'Time up':s.paused?'Resume':'Pause')+'</button>',
       '<button class="btn sm ghost" id="qp-back" '+(s.cursor===0?'disabled':'')+'>Previous</button>',
       '<button class="btn sm ghost" id="qp-skip" '+(s.cursor===n-1?'disabled':'')+'>Skip</button>',
       '<button class="btn sm ghost" id="qp-next" '+(s.cursor===n-1?'disabled':'')+'>Next</button></div>'
