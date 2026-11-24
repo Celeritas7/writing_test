@@ -249,15 +249,34 @@
     Q.busy=true;renderQuickPractice();
     try{
       const rows=s.items.map(i=>resultRow(i,s.owner,s.opts)).filter(Boolean);
+      let savedLocally=false;
       if(!DEMO){
-        const {error}=await sb.from('written_test_attempts').upsert(rows,{onConflict:'id'});
-        if(error)throw error;
+        const offline=typeof window!=='undefined'&&window.WTOffline;
+        const queuedJob={id:'quick-'+s.id,owner:s.owner,kind:'quick',
+          createdAt:new Date(s.startedAt).toISOString(),rows};
+        if(offline&&window.WTOffline.shouldQueue()){
+          await window.WTOffline.queue(queuedJob);
+          savedLocally=true;
+        }else{
+          try{
+            const {error}=await sb.from('written_test_attempts').upsert(rows,{onConflict:'id'});
+            if(error)throw error;
+          }catch(e){
+            // If the connection drops mid-save, retain stable UUIDs locally.
+            // An access/permission error is never presented as a synced save.
+            if(!offline)throw e;
+            await window.WTOffline.queue(queuedJob);
+            savedLocally=true;
+          }
+        }
+        const tagged=rows.map(r=>savedLocally?{...r,pending_local:true}:r);
         const fresh=new Set(rows.map(r=>r.id));
-        ATTEMPTS=[...rows,...ATTEMPTS.filter(a=>!fresh.has(a.id))].sort(
+        ATTEMPTS=[...tagged,...ATTEMPTS.filter(a=>!fresh.has(a.id))].sort(
           (a,b)=>new Date(b.graded_at)-new Date(a.graded_at));
       }
       Q.finished={count:rows.length,right:rows.filter(r=>r.correct).length,
-        weak:rows.filter(r=>!r.correct).length,minutes:s.opts.minutes,demo:DEMO};
+        weak:rows.filter(r=>!r.correct).length,minutes:s.opts.minutes,
+        demo:DEMO,queued:savedLocally};
       Q.session=null;Q.lastTick=null;
       try{await removeSnapshot(s.owner);}catch(e){toast('Results saved, but draft cleanup failed. Retrying later is safe.',7000);}
       renderQuickPractice();
@@ -408,7 +427,9 @@
       '<div class="kicker">Quick Practice</div><h1>Session complete</h1>',
       '<div class="card" style="margin-top:14px"><h2>'+s.count+' question'+(s.count===1?'':'s')+' checked</h2>',
       '<p>'+s.right+' correct · '+s.weak+' to review</p>',
-      '<p class="qp-hint">'+(s.demo?'Demo: no results were saved.':'Self-ratings were saved to Learning Hub. They influence your weak/due question selection.')+'</p>',
+      '<p class="qp-hint">'+(s.demo?'Demo: no results were saved.':
+        s.queued?'Saved on this iPad · sync pending. Export a private backup from Settings.':
+        'Self-ratings were saved to Learning Hub. They influence your weak/due question selection.')+'</p>',
       '<div class="acts"><button class="btn" id="qp-new">Another session</button> '+
         '<a class="btn sm ghost" href="#review">See feedback</a></div></div>'
     ].join('');
