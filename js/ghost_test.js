@@ -145,7 +145,8 @@ async function ghPersistDraft(){
   const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
   if(!strokes.length&&!Object.keys(GH.marks).length) return ghDraftClear();
   return ghDraftWrite({ts:Date.now(),topic:GH.topic,ext:GH.ext,seq:!!GH.seq,
-    marks:{...GH.marks},strokes,time:{...GH.time},saveId:GH.saveId||null});
+    marks:{...GH.marks},strokes,time:{...GH.time},saveId:GH.saveId||null,
+    ownerId:SESSION&&SESSION.user&&SESSION.user.id||null});
 }
 function ghDraftSave(){
   clearTimeout(ghDraftT);
@@ -156,7 +157,8 @@ let ghDraftChecked=false;
 async function ghDraftRestore(){
   if(ghDraftChecked||typeof idb==='undefined') return false; ghDraftChecked=true;
   let d=null; try{ d=await idb.get(GH_DRAFT_KEY); }catch(e){}
-  if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
+  if(!d||!d.ts||(Date.now()-d.ts>GH_DRAFT_TTL&&!d.saveId)) return false;
+  if(d.ownerId&&(!SESSION||!SESSION.user||SESSION.user.id!==d.ownerId)) return false;
   if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
   GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{}; GH.saveId=d.saveId||null; GH.locked=false;
   return true;
@@ -590,7 +592,8 @@ async function jpUpdateMarkings(items, url, key, who){
   if(!items.length) return 0;
   const inList='('+items.map(i=>'"'+String(i.kanji).replace(/"/g,'')+'"').join(',')+')';
   const q=await fetch(`${url}/rest/v1/japanese_user_markings?${jpUserQ()}kanji=in.${encodeURIComponent(inList)}&select=id,kanji,marking,user_id`,{headers:H});
-  const have=q.ok?await q.json():[];
+  if(!q.ok){const body=await q.json().catch(()=>({}));throw new Error('Could not read existing Japanese markings: '+(body.message||('HTTP '+q.status)));}
+  const have=await q.json();
   const byK={}; for(const r of have) byK[r.kanji]=r;
   const iso=new Date().toISOString();
   const rows=items.map(it=>{
