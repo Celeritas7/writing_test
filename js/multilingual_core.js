@@ -100,9 +100,13 @@
   function evidence({sessionId,owner,pack,mode,items,marks,when}){
     if(!sessionId||!owner||!pack||!Array.isArray(items)||!marks)throw Error('Invalid session evidence');
     const answers=items.filter(p=>[1,2,3].includes(marks[p.id])).map(p=>({
-      item_id:p.id,source_record:p.source_record,skill:mode==='write'?'writing':
-        mode==='reading'?'recognition':'usage',
-      direction:mode,raw_mark:marks[p.id],correct:marks[p.id]===1,
+      item_id:p.id,source_record:p.source_record,
+      skill:mode==='write'?'writing':'recognition',
+      source_app:'writing_test',source_event_key:sessionId+':'+p.id,
+      evidence_type:'self_checked_handwriting',
+      direction:mode,raw_mark:marks[p.id],
+      raw_label:marks[p.id]===1?'correct':marks[p.id]===2?'partial':'wrong',
+      correct:marks[p.id]===1,
       prompt:p.prompt,reference:p.answer
     }));
     if(!answers.length)throw Error('No rated answers');
