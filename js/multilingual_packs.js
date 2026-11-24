@@ -159,7 +159,8 @@
     return serialize(async()=>{
       const rows=await read('evidence',id);
       if(rows.some(x=>x.session_id===entry.session_id))return false;
-      await changeSessions([entry,...rows].slice(0,200),id);
+      if(rows.length>=200)throw Error('200 local sessions saved. Export your results before recording more; nothing was deleted.');
+      await changeSessions([entry,...rows],id);
       return true;
     });
   }
