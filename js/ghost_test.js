@@ -793,6 +793,42 @@ window.ghSave=async()=>{
   const sbtn=document.querySelector('.gh-save'); GH_SAVING=true; if(sbtn){ sbtn.disabled=true; sbtn.textContent='Saving…'; }
   try{ await ghSaveNow(); } catch(e){ toast('Save not confirmed — handwriting kept. '+(e.message||e),8000); } finally{ GH_SAVING=false; const b=document.querySelector('.gh-save'); if(b){ b.disabled=false; b.textContent='Save results'; } }
 };
+async function ghQueueOfflineSession(rows){
+  if(!window.WTOffline)throw Error('Offline results storage is unavailable');
+  const owner=SESSION&&SESSION.user&&SESSION.user.id;
+  if(!owner)throw Error('Sign in online and download a study pack first');
+  GH.sessionId=GH.sessionId||crypto.randomUUID();
+  GH.attemptTime=GH.attemptTime||new Date().toISOString();
+  GH.savePrepared=true;
+  // Reuse exactly the same session ID and result IDs if an online request
+  // committed remotely but its acknowledgement was lost.
+  await ghDraftPersist();
+  const hub=!GH.ext||GH.ext.src==='hub';
+  const record={
+    id:'ghost-'+GH.sessionId,owner,kind:hub?'hub':'japanese',
+    createdAt:GH.attemptTime,rows:hub?rows:[],
+    items:GH.items.filter(p=>GH.marks[p.id]).map(p=>({
+      id:p.id,topic_id:p.topic_id,prompt:p.prompt,answer:p.answer,
+      kanji:p.kanji||null,direction:ghDirOf(p),raw_mark:GH.marks[p.id],
+      seconds:ghSeconds(p.id)
+    })),
+    strokes:GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p})),
+    marks:{...GH.marks}
+  };
+  await WTOffline.queue(record);
+  if(hub){
+    const saved=rows.map(r=>({...r,pending_local:true}));
+    const ids=new Set(saved.map(r=>r.id));
+    ATTEMPTS=[...saved,...ATTEMPTS.filter(r=>!ids.has(r.id))];
+  }
+  GH.savePrepared=false;ghDraftClear();ghLogSession();
+  toast('Saved on iPad · sync pending. Export a private backup from Settings.',7500);
+  const end=ghEnding(null);
+  if(!end){ghExit();return;}
+  GH.locked=true;$('gh-sheet').classList.add('locked');ghDrawer(true);
+  ghShowEnding(end);
+}
+
 async function ghSaveNow(){
   const log_n=n=>n+' result'+(n===1?'':'s')+' marked';
   GH.attemptIds=GH.attemptIds||{};
@@ -812,47 +848,12 @@ async function ghSaveNow(){
     if(!a) return;
     if(a===true){ ghRestPass(); return ghSaveNow(); }
   }
-  /* Offline Hub/JP results use the same durable draft and stable IDs as
-     online saves, but are acknowledged only into the local pending queue.
-     The Pencil strokes are retained in that private pending record. */
+  /* Offline study, including an interrupted network save while Wi-Fi still
+     appears connected, uses durable local queueing instead of data loss. */
   if(!DEMO&&window.WTOffline&&WTOffline.shouldQueue()&&
      (!GH.ext||GH.ext.src!=='lex_import')){
-    const owner=SESSION&&SESSION.user&&SESSION.user.id;
-    if(!owner){toast('Sign in online and download a study pack first.',7000);return;}
-    GH.sessionId=GH.sessionId||crypto.randomUUID();
-    GH.attemptTime=GH.attemptTime||new Date().toISOString();
-    GH.savePrepared=true;
-    try{
-      await ghDraftPersist();
-      const hub=!GH.ext||GH.ext.src==='hub';
-      const record={
-        id:'ghost-'+GH.sessionId,owner,kind:hub?'hub':'japanese',
-        createdAt:GH.attemptTime,
-        rows:hub?rows:[],
-        items:GH.items.filter(p=>GH.marks[p.id]).map(p=>({
-          id:p.id,topic_id:p.topic_id,prompt:p.prompt,answer:p.answer,
-          kanji:p.kanji||null,direction:ghDirOf(p),raw_mark:GH.marks[p.id],
-          seconds:ghSeconds(p.id)
-        })),
-        strokes:GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p})),
-        marks:{...GH.marks}
-      };
-      await WTOffline.queue(record);
-      if(hub){
-        const saved=rows.map(r=>({...r,pending_local:true}));
-        const ids=new Set(saved.map(r=>r.id));
-        ATTEMPTS=[...saved,...ATTEMPTS.filter(r=>!ids.has(r.id))];
-      }
-    }catch(e){
-      toast('Local save incomplete — your handwriting is kept for retry: '+(e.message||e),8500);
-      return;
-    }
-    GH.savePrepared=false;ghDraftClear();ghLogSession();
-    toast('Saved on iPad · sync pending. Export the private backup from Settings.',7500);
-    const end=ghEnding(null);
-    if(!end){ghExit();return;}
-    GH.locked=true;$('gh-sheet').classList.add('locked');ghDrawer(true);
-    ghShowEnding(end);
+    try{await ghQueueOfflineSession(rows);}
+    catch(e){toast('Local save incomplete — handwriting kept: '+(e.message||e),8500);}
     return;
   }
   /* Imported lex-v1 compatible packs are intentionally device-only until
@@ -900,7 +901,13 @@ async function ghSaveNow(){
     /* Client-generated attempt IDs make a retry safe when the previous
        request succeeded on the server but its response was lost. */
     const {error}=await sb.from('written_test_attempts').upsert(rows,{onConflict:'id'});
-    if(error){toast('Save failed — sheet kept for retry: '+error.message,8000);return;}
+    if(error){
+      if(window.WTOffline){
+        try{await ghQueueOfflineSession(rows);}
+        catch(e){toast('Save failed; handwriting kept for retry: '+(e.message||e),8500);}
+      }else toast('Save failed — sheet kept for retry: '+error.message,8000);
+      return;
+    }
   }
   if(hub) ATTEMPTS=rows.concat(ATTEMPTS);
   let extra='', plan=null;
@@ -938,7 +945,11 @@ async function ghSaveNow(){
     }catch(e){
       /* Never clear the draft or downgrade to a different log table when a
          review write has an uncertain outcome. Retry with the same session ID. */
-      toast('Japanese save incomplete ('+(e.message||e)+'). Sheet kept; retry with the same marks.',9500);
+      if(window.WTOffline){
+        try{await ghQueueOfflineSession(rows);}
+        catch(local){toast('Japanese save incomplete and local queue failed: '+(local.message||local)+
+          '. Handwriting kept for retry.',9500);}
+      }else toast('Japanese save incomplete ('+(e.message||e)+'). Sheet kept; retry with the same marks.',9500);
       return;
     }
   }
