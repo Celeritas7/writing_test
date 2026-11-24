@@ -18,7 +18,7 @@ function uniqueId(name, taken){ let base=slug(name)||('x'+Date.now().toString(36
 const ORPHAN='__unsorted';
 function subjectOf(t){ return SUBJECTS.some(s=>s.id===t.subject_id)?t.subject_id:(t.subject_id?ORPHAN:(SUBJECTS[0]||{}).id); }
 const ACCENTS=['#b5532a','#c9a227','#2c5e8f','#a4302c','#8f2c5e','#23694e','#5e2c8f','#2c8f7a'];
-let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5};
+let buildSel = {subject:'all', topic:'smart', tiers:new Set(['warmup','core','challenge']), kinds:new Set(['drill','concept','applied']), count:5, paper:(()=>{try{return localStorage.getItem('wt-paper')==='letter'?'letter':'a4';}catch(e){return 'a4';}})()};
 let OPEN_SUBS=null;
 
 /* ---------- tiny IndexedDB for the folder handle ---------- */
@@ -477,13 +477,22 @@ function renderBuild(){
         <div><label>Tiers <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${tierPills}</div></div>
         <div><label>Kinds <span class="hint">· tap to include/exclude</span></label><div class="pillbar">${kindPills}</div></div>
         <div><label>Count <span class="hint">· 1–20</span></label><input type="number" min="1" max="20" value="${buildSel.count}" style="width:80px" onchange="buildSel.count=Math.min(20,Math.max(1,parseInt(this.value)||5));renderBuild()"></div>
+        <div><label for="wt-paper-size">Paper size</label><select id="wt-paper-size" onchange="buildSel.paper=this.value;try{localStorage.setItem('wt-paper',this.value);}catch(e){};renderBuild()">
+          <option value="a4" ${buildSel.paper==='a4'?'selected':''}>A4 (Japan)</option>
+          <option value="letter" ${buildSel.paper==='letter'?'selected':''}>US Letter</option></select></div>
       </div>
     </div>
     <div class="plist">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
       <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
-    </div><div id="exp-msg" class="msg"></div>${GRADER_KEY_PENDING?`<div id="grd-pending-action" style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
+    </div><div id="exp-msg" class="msg"></div>
+    ${LAST_STUDENT_EXPORT?`<div id="student-download-actions" class="acts" style="margin-top:10px">
+      <span style="font-size:12px;color:var(--mute)">${esc(LAST_STUDENT_EXPORT.filename)} — download again if iPad Safari blocked a file:</span>
+      <button class="btn sm ghost" onclick="redownloadStudentFile('pdf')">PDF again</button>
+      <button class="btn sm ghost" onclick="redownloadStudentFile('manifest')">Student manifest again</button>
+    </div>`:''}
+    ${GRADER_KEY_PENDING?`<div id="grd-pending-action" style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
@@ -552,10 +561,68 @@ const fmtDate=d=>{ const x=new Date(d); return isNaN(x)?'—':x.toLocaleDateStri
 function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?subjectOf(t):null; }
 /* Build view pre-filtered to one topic: weak problems rank first, so a wrong answer lands at the top */
 window.practise=tid=>{ buildSel.topic=tid; buildSel.subject=topicSubject(tid)||'all'; location.hash='build'; if(location.hash==='#build') renderBuild(); };
+/* Phase 1: legacy batches predate deterministic grading IDs. Keep their
+ * explicit manual status workflow; verify complete feedback for WT2 batches. */
+let BATCH_COVERAGE={}, FEEDBACK_REFRESHING=false;
+const phase1Batch=b=>!!b&&/^WT2_/.test(b.filename||'');
+async function batchCoverage(b){
+  const ids=await Promise.all([...new Set(b.problem_ids||[])].map(p=>WTWorksheet.attemptId(b.id,p)));
+  if(!ids.length)throw new Error('Batch has no questions');
+  const {data,error}=await sb.from('written_test_attempts').select('*').in('id',ids);
+  if(error)throw error;
+  const coverage=await WTWorksheet.coverage(b,data||[]);
+  BATCH_COVERAGE[b.id]={...coverage,checkedAt:Date.now()};
+  const found=new Set((data||[]).map(a=>a.id));
+  ATTEMPTS=[...ATTEMPTS.filter(a=>!found.has(a.id)),...(data||[])].sort(
+    (a,b)=>new Date(b.graded_at)-new Date(a.graded_at));
+  return coverage;
+}
+window.checkBatchFeedback=async id=>{
+  const b=BATCHES.find(x=>x.id===id);if(!b)return;
+  if(!phase1Batch(b)){toast('Legacy batches use manual grading; use Refresh feedback to see new marks.',5500);return;}
+  try{
+    const coverage=await batchCoverage(b);
+    toast(coverage.done+' of '+coverage.total+' grading results confirmed for '+b.filename,5500);
+    REV.open=id;renderReview();
+  }catch(e){toast('Could not check grading: '+(e.message||e),6500);}
+};
+window.refreshFeedback=async()=>{
+  if(FEEDBACK_REFRESHING||DEMO)return;
+  FEEDBACK_REFRESHING=true;
+  try{
+    const [a,b]=await Promise.all([
+      sb.from('written_test_attempts').select('*').order('graded_at',{ascending:false}),
+      sb.from('written_test_batches').select('*').order('created_at',{ascending:false})
+    ]);
+    if(a.error||b.error)throw a.error||b.error;
+    ATTEMPTS=a.data||[];BATCHES=b.data||[];
+    BATCH_COVERAGE={};
+    renderReview();toast('Feedback and batch status refreshed.');
+  }catch(e){toast('Refresh failed; existing feedback kept: '+(e.message||e),6500);}
+  finally{FEEDBACK_REFRESHING=false;}
+};
 window.setBatchStatus=async(id,status)=>{
-  const b=BATCHES.find(x=>x.id===id); if(!b) return;
-  if(!DEMO){ const {error}=await sb.from('written_test_batches').update({status}).eq('id',id); if(error){ toast('Could not update batch: '+error.message,5000); return; } }
-  b.status=status; toast('Batch marked '+status+'.'); renderReview();
+  const b=BATCHES.find(x=>x.id===id);if(!b)return;
+  if(status==='solved'){
+    const ok=await ask({title:'Is your completed PDF in solved/?',
+      body:'<p>Save the annotated PDF to <b>solved/</b> using the iPad Files app. This button records your confirmation; the browser cannot verify the iCloud folder on iPad Safari.</p>',
+      ok:'Yes, saved in solved/',cancel:'Not yet'});
+    if(!ok)return;
+  }
+  if(status==='graded'&&phase1Batch(b)&&!DEMO){
+    try{
+      const coverage=await batchCoverage(b);
+      if(coverage.done!==coverage.total){
+        toast('Not marked graded: '+coverage.done+' of '+coverage.total+' verified Cowork results. Check the grader first.',7500);
+        REV.open=id;renderReview();return;
+      }
+    }catch(e){toast('Could not verify grading: '+(e.message||e),6500);return;}
+  }
+  if(!DEMO){
+    const {error}=await sb.from('written_test_batches').update({status}).eq('id',id);
+    if(error){toast('Could not update batch: '+error.message,5000);return;}
+  }
+  b.status=status;toast('Batch marked '+status+'.');renderReview();
 };
 function renderReview(){
   const topicName=id=>(TOPICS.find(t=>t.id===id)||{}).name||'';
@@ -565,11 +632,15 @@ function renderReview(){
     const open=REV.open===b.id;
     const probs=(b.problem_ids||[]).map(id=>{ const p=PROBLEMS.find(x=>x.id===id)||{subtitle:id}; const s=pstatus(p,latest);
       return `<li><span>${esc(p.subtitle)}</span><span class="chip ${s.code==='weak'?'weak':s.code==='due'?'due':s.code==='ok'?'ok':'new'}">${esc(s.label)}</span></li>`; }).join('');
-    const next=b.status==='exported'?['solved','Mark solved']:b.status==='solved'?['graded','Mark graded']:null;
+    const next=b.status==='exported'?['solved','I saved it in solved/']:b.status==='solved'?['graded',phase1Batch(b)?'Confirm graded':'Mark graded (legacy)']:null;
+    const c=BATCH_COVERAGE[b.id], done=c?c.done:0, total=c?c.total:(b.problem_ids||[]).length;
+    const verifyBtn=phase1Batch(b)?`<button class="btn sm ghost" onclick="event.stopPropagation();checkBatchFeedback('${esc(b.id)}')">Check feedback${c?' ('+done+'/'+total+')':''}</button>`:'';
+    const nextButton=next?`<button class="btn sm ghost" onclick="event.stopPropagation();setBatchStatus('${esc(b.id)}','${next[0]}')" ${next[0]==='graded'&&phase1Batch(b)&&(!c||c.done!==c.total)?'disabled title="Check feedback first"':''}>${next[1]}</button>`:'';
     return `<tr class="brow" tabindex="0" role="button" aria-expanded="${open}" onclick="REV.open=REV.open==='${esc(b.id)}'?null:'${esc(b.id)}';renderReview()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
       <td class="mono" style="font-size:12px">${esc(b.filename)}</td><td>${esc(topicName(b.topic_id)||'mixed')}</td><td>${(b.problem_ids||[]).length}</td><td><span class="chip status-${esc(b.status)}">${esc(b.status)}</span></td><td style="color:var(--mute)">${fmtDate(b.created_at)}</td></tr>
       ${open?`<tr class="bopen"><td colspan="5"><ul class="blist">${probs||'<li style="color:var(--mute)">No problems recorded for this batch.</li>'}</ul>
-        <div class="acts">${next?`<button class="btn sm ghost" onclick="event.stopPropagation();setBatchStatus('${esc(b.id)}','${next[0]}')">${next[1]}</button>`:''}<button class="btn sm ghost" onclick="event.stopPropagation();REV.batch='${esc(b.id)}';REV.open=null;renderReview()">Show its feedback</button></div></td></tr>`:''}`;
+        <div class="acts">${nextButton}${verifyBtn}<button class="btn sm ghost" onclick="event.stopPropagation();REV.batch='${esc(b.id)}';REV.open=null;renderReview()">Show its feedback</button></div>
+        ${phase1Batch(b)?`<p style="font-size:12px;color:var(--mute)">${c?'Verified '+done+' of '+total+' grading results':'Use Check feedback after Cowork processes the solved PDF. Only verified complete batches can be marked graded.'}</p>`:''}</td></tr>`:''}`;
   }).join('');
   // ---- feedback entries
   let list=ATTEMPTS.filter(a=>(REV.topic==='all'||a.topic_id===REV.topic)&&(!REV.wrong||!a.correct));
@@ -610,6 +681,7 @@ function renderReview(){
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
     <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
+    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
     <h2 style="margin:0 0 8px">Feedback</h2>
     <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
     ${fb}
@@ -640,12 +712,23 @@ function renderSetup(){
         <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
         <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--amber)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'Not linked yet'}</span></div>
           <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
-        <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
-        <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
+        <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it <span class="mono">COWORK_TASK.md</span>. If your folder was linked before this release, <button class="btn sm ghost" onclick="refreshGraderTask()">Update grading instructions</button> to enable the new retry-safe v2 workflow. Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
+        <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>. In Review, confirm <b>I saved it in solved/</b>, then choose <b>Check feedback</b> after grading.</div></div><div class="step"><div><b>iPad Safari:</b> Direct folder linking is unavailable. Export the PDF and student-safe .json, move them to outbox/ with the Files app, and download the separate PRIVATE grader file only when needed. Keep that private key in grader/ (never outbox/). Refresh feedback after Cowork finishes.</div></div>
       </div>
     </div>
 `;
 }
+window.refreshGraderTask=async()=>{
+  try{
+    if(DIR){
+      await writeText(DIR,'COWORK_TASK.md',coworkTask());
+      toast('COWORK_TASK.md updated with the Phase 1 grading contract.',5500);
+    }else{
+      download(new Blob([coworkTask()],{type:'text/markdown;charset=utf-8'}),'COWORK_TASK.md');
+      toast('Grader task downloaded. Put it beside the grader/ folder on your PC; do not include the service key.',6500);
+    }
+  }catch(e){toast('Could not update grader instructions: '+(e.message||e),6500);}
+};
 window.linkFolder=linkFolder;
 
 /* ---------- folder ---------- */
@@ -680,7 +763,13 @@ async function writeText(dirHandle, name, text){
 }
 
 /* ---------- export ---------- */
-let EXPORTING=false, GRADER_KEY_PENDING=null;
+let EXPORTING=false, GRADER_KEY_PENDING=null, LAST_STUDENT_EXPORT=null;
+window.redownloadStudentFile=kind=>{
+  const x=LAST_STUDENT_EXPORT;
+  if(!x){toast('Export a worksheet first.');return;}
+  if(kind==='pdf')download(x.pdf,x.filename);
+  else if(kind==='manifest')download(new Blob([x.manifest],{type:'application/json'}),x.manifestName);
+};
 /* Grader keys contain answers. Download them separately and only after
    explicit confirmation, never beside student-facing PDF/manifest by default. */
 window.downloadGraderKey=async()=>{
@@ -707,40 +796,63 @@ async function exportBatchNow(q, m){
   const two=n=>String(n).padStart(2,'0');
   const stamp=`${now.getFullYear()}${two(now.getMonth()+1)}${two(now.getDate())}_${two(now.getHours())}${two(now.getMinutes())}`; // local time, matches the Review table
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');
-  const fname=`WT_${topicSlug}_${stamp}.pdf`;
-  const batchId=(crypto.randomUUID&&crypto.randomUUID())||String(now.getTime());
+  const safeTopic=String(topicSlug).replace(/[^a-z0-9_-]/gi,'_').slice(0,45);
+  if(!crypto.randomUUID) throw new Error('Secure connection required for batch IDs');
+  const batchId=crypto.randomUUID();
+  const fname=`WT2_${safeTopic}_${stamp}_${batchId.slice(0,8)}.pdf`;
   if(!DIR&&DIR_PENDING) await reconnectDir(); // still inside the click's user activation
   const blob=await makePdf(q, fname, batchId);
   const jname=fname.replace(/\.pdf$/,'.json');
-  const prob=x=>({id:x.p.id, topic_id:x.p.topic_id, number:x.p.number, subtitle:x.p.subtitle, prompt:x.p.prompt, given_data:x.p.given_data||null, tier:x.p.tier, kind:x.p.kind, picked_because:x.why});
-  const head={batch_id:batchId, user_id:DEMO?'demo':SESSION.user.id, created_at:now.toISOString(), filename:fname};
-  // outbox/ syncs to the iPad next to the sheet, so it never carries answers; grader/ holds the full key
-  const manifest=JSON.stringify({...head, problems:q.map(prob)}, null, 2);
-  const key=JSON.stringify({...head, problems:q.map(x=>({...prob(x), answer:x.p.answer||null, worked:x.p.worked||null}))}, null, 2);
+  // Student and private grader payloads are created by the same versioned contract.
+  // A stable grade attempt ID enables retry-safe Cowork grading and batch verification.
+  const artifacts=await WTWorksheet.manifests({batchId,userId:DEMO?'demo':SESSION.user.id,
+    createdAt:now.toISOString(),filename:fname,questions:q});
+  const manifest=artifacts.student, key=artifacts.grader;
+  // A student file must not be published without a tracked batch.
+  const batchRow={id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,
+    problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()};
+  if(!DEMO){
+    const {error}=await sb.from('written_test_batches').insert({
+      id:batchId,topic_id:batchRow.topic_id,problem_ids:batchRow.problem_ids,filename:fname
+    });
+    if(error)throw new Error('Batch tracking failed; no student files exported. '+error.message);
+  }
+  BATCHES.unshift(batchRow);
   let dest='downloaded', written=false;
   if(DIR){
     try{
       const out=await DIR.getDirectoryHandle('outbox',{create:true});
+      const gr=await DIR.getDirectoryHandle('grader',{create:true});
+      // Private key and student manifest must exist before publishing the PDF
+      // that triggers the grader's folder watcher.
+      await writeText(gr, jname, key);
+      await writeText(out, jname, manifest);
       const fh=await out.getFileHandle(fname,{create:true});
       const w=await fh.createWritable(); await w.write(blob); await w.close();
-      await writeText(out, jname, manifest);
-      const gr=await DIR.getDirectoryHandle('grader',{create:true});
-      await writeText(gr, jname, key);
       dest='outbox/ (syncing to iPad)'; written=true;
     }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
   }
   if(!written){
+    LAST_STUDENT_EXPORT={filename:fname,pdf:blob,manifestName:jname,manifest};
+    GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
     download(blob, fname);
     download(new Blob([manifest],{type:'application/json'}), jname); // student-safe: no answer fields
-    GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
-    dest='PDF + student manifest downloaded; grader key held separately';
-  } else GRADER_KEY_PENDING=null;
-  if(!DEMO){
-    const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
-    if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
-  } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
+    dest='student files requested for download; use separate buttons if Safari blocks a file';
+  } else {GRADER_KEY_PENDING=null; LAST_STUDENT_EXPORT=null;}
+
   m.className='msg ok';
   m.textContent=`${fname} → ${dest}. Solve the PDF on your iPad and save it into solved/.`;
+  const oldStudent=$('student-download-actions'); if(oldStudent)oldStudent.remove();
+  if(LAST_STUDENT_EXPORT){
+    const actions=document.createElement('div'); actions.id='student-download-actions'; actions.className='acts';
+    actions.style.marginTop='10px';
+    actions.append(document.createTextNode('If Safari blocked a file, download it separately:'));
+    for(const [kind,label] of [['pdf','PDF again'],['manifest','Student manifest again']]){
+      const b=document.createElement('button');b.className='btn sm ghost';b.textContent=label;
+      b.addEventListener('click',()=>redownloadStudentFile(kind));actions.appendChild(b);
+    }
+    m.insertAdjacentElement('afterend',actions);
+  }
   const oldButton=$('grd-pending-action'); if(oldButton)oldButton.remove();
   if(GRADER_KEY_PENDING){
     m.append(document.createTextNode(' Private answers were NOT included in student downloads.'));
@@ -764,107 +876,129 @@ async function pdfFont(){
 }
 async function makePdf(q, fname, batchId){
   const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({unit:'pt', format:'letter'}); // 612 x 792
-  const M=54, W=612-2*M, LH=15, TOP=112, BOTTOM=740, GRID_MIN=160, GRID_END=668;
+  const format=buildSel.paper==='letter'?'letter':'a4';
+  const doc=new jsPDF({unit:'pt',format});
+  const PAGE_W=doc.internal.pageSize.getWidth(), PAGE_H=doc.internal.pageSize.getHeight();
+  const M=48, W=PAGE_W-2*M, LH=16, GRID_END=PAGE_H-140, MIN_GRID=145;
   const text=q.map(x=>[x.p.subtitle,x.p.prompt,x.p.given_data,(TOPICS.find(z=>z.id===x.p.topic_id)||{}).name].join(' ')).join(' ');
-  let F='helvetica', FM='courier';
-  if(/[^\u0000-ÿ]/.test(text)){
-    try{ doc.addFileToVFS('NotoSansJP.ttf', await pdfFont()); doc.addFont('NotoSansJP.ttf','NotoSansJP','normal'); doc.addFont('NotoSansJP.ttf','NotoSansJP','bold'); F=FM='NotoSansJP'; }
-    catch(e){ toast('Japanese font could not be loaded — non-Latin text may not print.', 6000); }
+  let F='helvetica',FM='courier';
+  if(/[^\u0000-\u00ff]/.test(text)){
+    // Do not silently produce unreadable Japanese/math PDFs when the font fetch fails.
+    try{
+      doc.addFileToVFS('NotoSansJP.ttf',await pdfFont());
+      doc.addFont('NotoSansJP.ttf','NotoSansJP','normal');
+      doc.addFont('NotoSansJP.ttf','NotoSansJP','bold');
+      F=FM='NotoSansJP';
+    }catch(e){ throw new Error('Unicode PDF font unavailable. Reconnect and retry; no worksheet exported. '+(e.message||e)); }
   }
-  const footer=(i,p,cont)=>{
-    doc.setFontSize(7.5); doc.setTextColor(150); doc.setFont('courier','normal');
-    doc.text(`batch:${batchId}  problem:${p.id}`, M, 764);
-    doc.text(`${i+1} / ${q.length}${cont?' (cont.)':''}`, 612-M, 764, {align:'right'});
+  const fit=(t,width)=>{
+    let out=String(t||'');
+    while(out.length>1&&doc.getTextWidth(out)>width)out=out.slice(0,-1);
+    return out===String(t||'')?out:out.replace(/.{0,3}$/,'')+'...';
   };
-  const header=(i,p,t,cont)=>{
-    doc.setFont('helvetica','bold'); doc.setFontSize(30); doc.setTextColor(35,105,78);
-    doc.text(String(i+1).padStart(2,'0'), M, 78);
-    doc.setFontSize(10); doc.setTextColor(120); doc.setFont(FM,'normal');
-    const kick=((t.name||p.topic_id)+'  ·  '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')+(cont?'  ·  continued':'')).toUpperCase();
-    doc.text(kick, M+50, 70);
-    const kw=doc.getTextWidth(kick);
-    doc.setFont(F,'bold'); doc.setFontSize(14); doc.setTextColor(28,35,32);
-    let sub=p.subtitle||'', avail=W-50-kw-16;
-    if(doc.getTextWidth(sub)>avail){ doc.setFontSize(11); }
-    if(doc.getTextWidth(sub)>avail){ while(sub.length>1&&doc.getTextWidth(sub+'…')>avail) sub=sub.slice(0,-1); sub+='…'; }
-    doc.text(sub, 612-M, 74, {align:'right'});
-    doc.setDrawColor(28,35,32); doc.setLineWidth(1.4); doc.line(M, 88, 612-M, 88);
-    footer(i,p,cont);
-    return TOP;
+  const footer=(i,p,continued)=>{
+    doc.setFont('courier','normal');doc.setFontSize(7.2);doc.setTextColor(125);
+    doc.text('batch:'+batchId, M, PAGE_H-34);
+    doc.text('problem:'+String(p.id),M,PAGE_H-22);
+    doc.text((i+1)+' / '+q.length+(continued?' (cont.)':''),PAGE_W-M,PAGE_H-24,{align:'right'});
+  };
+  const header=(i,p,t,continued)=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(27);doc.setTextColor(35,105,78);
+    doc.text(String(i+1).padStart(2,'0'),M,73);
+    doc.setFont(FM,'normal');doc.setFontSize(10);doc.setTextColor(92);
+    const kick=((t.name||p.topic_id||'Practice')+' · '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')+
+      (continued?' · continued':'')).toUpperCase();
+    doc.text(fit(kick,W-64),M+56,70);
+    doc.setFont(F,'bold');doc.setFontSize(12);doc.setTextColor(28,35,32);
+    const titleLines=doc.splitTextToSize(p.subtitle||'Practice',W);
+    const shortTitle=titleLines.slice(0,2);
+    if(titleLines.length>2)shortTitle[1]=fit(shortTitle[1]+'...',W);
+    doc.text(shortTitle,M,97);
+    const lineY=108+shortTitle.length*14;
+    doc.setDrawColor(28,35,32);doc.setLineWidth(1);
+    doc.line(M,lineY,PAGE_W-M,lineY);
+    footer(i,p,continued);
+    return lineY+18;
+  };
+  const newPage=(i,p,t)=>{
+    doc.addPage();
+    return header(i,p,t,true);
   };
   q.forEach((x,i)=>{
-    if(i) doc.addPage();
-    const p=x.p, t=TOPICS.find(z=>z.id===p.topic_id)||{};
-    let y=header(i,p,t,false), cont=false;
-    // prompt — flows onto continuation pages when it is long
-    doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32);
-    let lines=doc.splitTextToSize(p.prompt||'', W);
+    if(i)doc.addPage();
+    const p=x.p,t=TOPICS.find(z=>z.id===p.topic_id)||{};
+    let y=header(i,p,t,false);
+    doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);
+    const lines=doc.splitTextToSize(p.prompt||'',W);
     while(lines.length){
-      const n=Math.max(1, Math.floor((BOTTOM-y)/LH));
-      const chunk=lines.slice(0,n); lines=lines.slice(n);
-      doc.text(chunk, M, y); y+=chunk.length*LH;
-      if(lines.length){ doc.addPage(); cont=true; y=header(i,p,t,true); doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32); }
+      const space=Math.floor((GRID_END-MIN_GRID-y-12)/LH);
+      if(space<1){y=newPage(i,p,t);doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);continue;}
+      const chunk=lines.splice(0,space);
+      doc.text(chunk,M,y);
+      y+=chunk.length*LH;
+      if(lines.length){y=newPage(i,p,t);doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);}
     }
-    y+=10;
-    // given box — wrap width measured in the font it is drawn with
+    y+=12;
     if(p.given_data){
-      doc.setFont(FM,'normal'); doc.setFontSize(10);
-      const gl=doc.splitTextToSize('GIVEN   '+p.given_data, W-24);
-      const bh=gl.length*13+20;
-      if(y+bh>BOTTOM){ doc.addPage(); cont=true; y=header(i,p,t,true); }
-      doc.setFillColor(247,251,253); doc.setDrawColor(224,220,208); doc.setLineWidth(.8);
-      doc.roundedRect(M, y, W, bh, 3, 3, 'FD');
-      doc.setFont(FM,'normal'); doc.setFontSize(10); doc.setTextColor(35,105,78);
-      doc.text(gl, M+12, y+16); y+=bh+16;
+      doc.setFont(FM,'normal');doc.setFontSize(10);
+      const given=doc.splitTextToSize('GIVEN  '+String(p.given_data),W-24);
+      while(given.length){
+        const space=Math.floor((GRID_END-MIN_GRID-y-36)/14);
+        if(space<1){y=newPage(i,p,t);doc.setFont(FM,'normal');doc.setFontSize(10);continue;}
+        const chunk=given.splice(0,space),height=chunk.length*14+20;
+        doc.setFillColor(247,251,253);doc.setDrawColor(224,220,208);doc.setLineWidth(.8);
+        doc.roundedRect(M,y,W,height,3,3,'FD');
+        doc.setFont(FM,'normal');doc.setFontSize(10);doc.setTextColor(35,105,78);
+        doc.text(chunk,M+12,y+17);
+        y+=height+12;
+        if(given.length){y=newPage(i,p,t);doc.setFont(FM,'normal');doc.setFontSize(10);}
+      }
     }
-    // the work area always gets a full-height page if the text has eaten it
-    if(y>GRID_END-GRID_MIN){ doc.addPage(); cont=true; y=header(i,p,t,true); }
-    doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(150);
-    doc.text('WORK AREA — SHOW EVERY STEP', M, y+10);
-    doc.setDrawColor(222,232,238); doc.setLineWidth(.5);
-    for(let gy=y+24; gy<GRID_END; gy+=22) doc.line(M, gy, 612-M, gy);
-    // answer
-    doc.setFontSize(8); doc.setTextColor(120); doc.text('ANSWER', M, 690);
-    doc.setDrawColor(70,82,75); doc.setLineWidth(.8);
-    doc.line(M, 712, 612-M, 712); doc.line(M, 736, 612-M, 736);
+    if(y+MIN_GRID>GRID_END)y=newPage(i,p,t);
+    doc.setFont('courier','normal');doc.setFontSize(8);doc.setTextColor(140);
+    doc.text('WORK AREA - SHOW EVERY STEP',M,y+10);
+    doc.setDrawColor(222,232,238);doc.setLineWidth(.5);
+    for(let gy=y+26;gy<GRID_END;gy+=22)doc.line(M,gy,PAGE_W-M,gy);
+    doc.setFontSize(8);doc.setTextColor(120);
+    doc.text('ANSWER',M,PAGE_H-112);
+    doc.setDrawColor(70,82,75);doc.setLineWidth(.8);
+    doc.line(M,PAGE_H-90,PAGE_W-M,PAGE_H-90);
+    doc.line(M,PAGE_H-66,PAGE_W-M,PAGE_H-66);
   });
+  doc.setProperties({title:fname,subject:'Learning Hub worksheet '+batchId});
   return doc.output('blob');
 }
 
 /* ---------- cowork task (written into the linked folder) ---------- */
 function coworkTask(){
   const uid=DEMO?'<your-user-id>':SESSION.user.id;
-  return `# Cowork task — grade my written-test batches
+  return `# Learning Hub — grading instructions
 
-You are my study grader. This folder is the exchange point between my Learning Hub app, my iPad, and you.
+This task belongs to the Writing Test / Learning Hub application. Preserve the original handwritten PDF.
 
-## Folder layout
-- outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename, no answers — this folder syncs to the iPad)
-- grader/  — private full manifest including reference answers. Linked exports use <basename>.json; manual private downloads use <basename>.grader.json. NEVER copy to outbox/.
-- solved/  — PDFs I solved by hand on the iPad (Markup annotations). NEW FILES HERE = YOUR TRIGGER.
-- graded/  — where you move PDFs after grading
+## Folder roles
+- outbox/: student-facing worksheet PDFs and .json manifests (NO answers).
+- grader/: PRIVATE answer manifests (.json from linked export or .grader.json from explicit download). Contains answers, worked solutions, and v2 attempt_id values.
+- solved/: annotated PDFs saved by the learner via the iPad Files app. New files trigger grading.
+- graded/: move the solved PDFs here only after confirmed results.
 
-## When a new PDF appears in solved/
-1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the private answer manifest in grader/ (<basename>.json for linked exports, or <basename>.grader.json for manually downloaded keys). The manifest in outbox/ intentionally has no answers.
-2. Grade each problem from my handwriting: is the method sound, is the final answer right, where exactly did I slip. Be specific and reference my actual steps.
-3. For each problem, insert one row into Supabase (service role key is at ~/.config/writtentest/service_role_key — read it, never copy it into this folder):
+## Process a completed PDF
+1. Match the solved PDF to the private grader manifest and cross-check batch ID and problem ID printed in each PDF footer. Never use outbox/ as an answer key.
+2. Grade each answer from the visible handwriting: method, correctness, specific mistakes, and suggestions. Do not invent work where a page is blank.
+3. For manifest_version=2, each private problem includes a stable attempt_id. Use it verbatim as the UUID id on the written_test_attempts row; this makes retries update an existing record rather than insert a duplicate.
+4. Upsert each v2 result to the General_apps project at /rest/v1/written_test_attempts?on_conflict=id with HTTP POST and the header Prefer: resolution=merge-duplicates,return=minimal. Each row must contain id=attempt_id, problem_id, topic_id, user_id=${uid}, correct, rating (1 to 5), score, max_score, notes, graded_by=cowork, and graded_at in ISO format.
+5. Use the Supabase service-role key only from the local unsynced ~/.config/writtentest/service_role_key. NEVER put that key in an iCloud folder, the PDF, a manifest, a log, a web app or GitHub. Stop on access errors.
+6. Read back all expected attempt_id rows using authenticated, authorized access. Only after every problem has a confirmed Cowork result may you set the written_test_batches status to graded and set graded_at. Do NOT declare completion based merely on a successful upload response.
+7. If any attempt is missing or cannot be verified, keep the batch solved and its PDF in solved/. Report what failed and leave the remaining items for later.
+8. Once all results are verified, move the annotated PDF from solved/ to graded/. The learner can use Review → Check feedback for v2 batches and Refresh feedback to retrieve the graded work.
 
-\`\`\`
-curl -s -X POST "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1/written_test_attempts" \\
-  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\
-  -d '{"problem_id":"<problem_id>","topic_id":"<topic_id>","user_id":"${uid}","correct":true,"rating":4,"score":1,"max_score":1,"notes":"<specific feedback>","graded_by":"cowork"}'
-\`\`\`
+Rating: 5 flawless · 4 correct with minor slips · 3 correct but shaky method · 2 incorrect with a sound idea · 1 incorrect.
 
-rating scale: 5 flawless · 4 right with minor slips · 3 right but shaky method · 2 wrong, right idea · 1 wrong.
+## iPad Safari manual flow
+Safari does not support the desktop folder-link API. Export student PDF and safe .json manifest via Downloads, then use Files to move both into the iCloud outbox/ folder. Export the PRIVATE answer key only when needed and put it in grader/ (never outbox/).
 
-4. Mark the batch graded:
-\`\`\`
-curl -s -X PATCH "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1/written_test_batches?id=eq.<batch_id>" \\
-  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\
-  -d '{"status":"graded","graded_at":"<now ISO>"}'
-\`\`\`
-5. Move the solved PDF into graded/. Optionally leave a short <basename>-feedback.md next to it summarising the session.
+## Legacy batches
+Legacy WT_ PDFs may not have stable attempt_id values. Do not invent IDs and do not assume legacy regrading is idempotent; flag retries for manual confirmation.
 
-Never modify files in outbox/. Never write secrets into this folder (it syncs to iCloud).`;
+Never change the Supabase schema, RLS policies or authentication. Never reveal the service-role key.`;
 }

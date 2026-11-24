@@ -9,6 +9,16 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 1: worksheet submission and grading
+
+Build now supports **A4 (default)** or **US Letter**, with continuation pages for long questions and given data. Each new `WT2_` batch creates a **student PDF + answer-free manifest** and a **separate PRIVATE grader key**; only the latter contains reference answers and stable `attempt_id` fields used to avoid duplicate grading attempts.
+
+On iPad Safari, the desktop folder-link API is unavailable. Export the PDF and safe manifest, move both to `iCloud Drive/WrittenTest/outbox/` using Files, solve using Apple Pencil/Markup, and save the annotated PDF in `solved/`. Explicitly download and privately transfer the `.grader.json` key into `grader/` when needed. From **Review**, confirm the file is in solved/, then use **Check feedback** and **Refresh feedback** after Cowork grades it. New batches cannot be manually marked graded until all expected Cowork result IDs are found.
+
+If your desktop folder was linked before Phase 1, use **Settings → Update grading instructions** to update `COWORK_TASK.md`. The older `WT_` batches keep their manual status controls.
+
+Full acceptance checklist: [docs/phase1-worksheet-grading.md](docs/phase1-worksheet-grading.md). Offline support remains a separate draft PR.
+
 ## One-time setup
 1. **Supabase** — run `sql/schema.sql` in the SQL editor of your project (the `sql/` folder is git-ignored; keep it locally). It creates `written_test_subjects / topics / problems / attempts / batches` and the write policies the app needs.
 2. **Keys** — `js/learning_hub.js` holds the project URL and anon key; `js/ghost_test.js` holds the Japanese project's URL, anon key and your user id (defaults — Connection settings in the Ghost test override them).
@@ -36,6 +46,7 @@ On phones the sections are a bottom tab bar; on wider screens they are the left 
 index.html                 shell: sign-in gate, sidebar, #main, toast
 css/learning_hub.css       all styles (responsive rules in §8)
 js/learning_hub.js         auth, data, Home / Library / Build / Review / Settings, PDF export
+js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log
 js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
 fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
