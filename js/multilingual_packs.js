@@ -2,7 +2,7 @@
  * No remote fetch, no Technical-project API keys and NO progress sync. */
 (function(){
   'use strict';
-  let expanded=false,loading=false,error='',packs=[],sessions=[],loadedFor=null;
+  let expanded=false,loading=false,error='',packs=[],sessions=[],loadedFor=null,draft=null;
   let writeQueue=Promise.resolve();
   const maxBytes=2*1024*1024;
   const core=window.WTMultiCore;
@@ -24,12 +24,14 @@
   async function load(){
     const id=owner();if(!id)throw Error('Sign in before using language packs');
     if(loadedFor===id)return;
-    if(loadedFor!==id){packs=[];sessions=[];loadedFor=null;}
+    if(loadedFor!==id){packs=[];sessions=[];draft=null;loadedFor=null;}
     loading=true;error='';
     try{
-      const all=await Promise.all([read('packs',id),read('evidence',id)]);
+      const all=await Promise.all([read('packs',id),read('evidence',id),
+        DEMO?Promise.resolve(null):idb.get('gh-draft-lex-'+id)]);
       packs=Array.isArray(all[0])?all[0]:[];
       sessions=Array.isArray(all[1])?all[1]:[];
+      draft=all[2]||null;
       loadedFor=id;
     }catch(e){error='Could not open saved vocabulary: '+(e.message||e);throw e;}
     finally{loading=false;}
@@ -68,6 +70,8 @@
       '<p class="ml-sub">Accepts wt-writing-pack-v1 or the future approved lex-v1-public-export. Public vocabulary only—no credentials or personal progress.</p>'+
       '<button class="btn sm ghost" type="button" onclick="ghDownloadLanguageTemplate()">Download sample JSON template</button></div>'+
       '<div class="ml-packs">'+entries+'</div>'+
+      (draft&&draft.ts&&Date.now()-draft.ts<7*864e5&&draft.ext&&draft.ext.owner===owner()?
+        '<div class="ml-resume"><button class="btn sm" type="button" onclick="ghResumeLanguageSheet()">Resume unfinished imported handwriting</button></div>':'')+
       '<div class="ml-export"><button class="btn sm ghost" type="button" onclick="ghExportLanguageEvidence()" '+
       (!sessions.length?'disabled':'')+'>Export '+sessions.length+' local writing session'+
       (sessions.length===1?'':'s')+'</button>'+
@@ -76,7 +80,10 @@
   async function show(){
     expanded=!expanded;
     if(expanded){
-      try{await load();}catch(e){toast('Language packs could not load. '+(e.message||e),6000);}
+      try{
+        await load();
+        if(!DEMO)draft=await idb.get('gh-draft-lex-'+owner());
+      }catch(e){toast('Language packs could not load. '+(e.message||e),6000);}
     }
     renderGhost();
   }
@@ -126,6 +133,26 @@
         ' · '+core.MODES[mode],items};
     GH.seq=false;GH_PANEL=false;expanded=false;renderGhost();
   }
+  async function resume(){
+    const id=owner();if(!id)return;
+    try{
+      const d=DEMO?draft:await idb.get('gh-draft-lex-'+id);
+      if(!d||!d.ts||Date.now()-d.ts>=7*864e5||d.ext?.src!=='lex_import'||d.ext.owner!==id)
+        throw Error('No unfinished sheet for this signed-in account');
+      if(GH.savePrepared&&!GH.locked)throw Error('Finish retrying your current pending save first');
+      if(GH.strokes.length||Object.values(GH.marks||{}).some(Boolean)){
+        const yes=await ask({title:'Restore imported writing sheet?',
+          body:'<p>The current visible handwriting will be replaced. Its separately saved Japanese draft will not be deleted.</p>',
+          ok:'Restore imported sheet',cancel:'Keep current sheet',danger:true});
+        if(!yes)return;
+      }
+      GH.ext=d.ext;GH.seq=!!d.seq;GH.topic=d.topic||GH.topic;
+      GH.marks=d.marks||{};GH.strokes=d.strokes||[];GH.time=d.time||{};
+      GH.sessionId=d.sessionId||null;GH.attemptIds=d.attemptIds||{};
+      GH.attemptTime=d.attemptTime||null;GH.savePrepared=!!d.savePrepared;
+      GH.locked=false;expanded=false;renderGhost();
+    }catch(e){toast('Cannot restore imported sheet: '+(e.message||e),7000);}
+  }
   async function remove(key){
     const id=owner();if(!safe(key))return;
     await load();
@@ -133,8 +160,8 @@
       toast('Finish or switch away from this pack before removing it.',5500);return;
     }
     try{
-      const draft=DEMO?null:await idb.get('gh-draft');
-      if(draft?.ext?.src==='lex_import'&&draft.ext.owner===id&&draft.ext.pack_key===key){
+      const drafts=DEMO?[]:await Promise.all([idb.get('gh-draft'),idb.get('gh-draft-lex-'+id)]);
+      if(drafts.some(d=>d?.ext?.src==='lex_import'&&d.ext.owner===id&&d.ext.pack_key===key)){
         toast('A saved unfinished sheet uses this pack. Restore/finish that sheet first.',7000);return;
       }
     }catch(e){toast('Could not verify draft safety: '+e.message,6500);return;}
@@ -198,6 +225,7 @@
   window.ghUploadLanguagePack=upload;
   window.ghOpenLanguagePack=open;
   window.ghDeleteLanguagePack=remove;
+  window.ghResumeLanguageSheet=resume;
   window.ghDownloadLanguageTemplate=downloadTemplate;
   window.ghExportLanguageEvidence=exportEvidence;
 })();
