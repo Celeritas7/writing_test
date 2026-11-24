@@ -2,7 +2,16 @@
 const SUPABASE_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e3pDOuxIdstaC7s0a680kQ_R10TrAyv";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-if (window.AkatsukiBroadcast) window.AkatsukiBroadcast(sb, 'writing_test').start();
+/* Optional broadcaster does not block startup when iPad is offline. */
+let BROADCAST_STARTED=false;
+function maybeStartBroadcaster(){
+  if(BROADCAST_STARTED||!navigator.onLine||!window.AkatsukiBroadcast)return;
+  try{window.AkatsukiBroadcast(sb,'writing_test').start();BROADCAST_STARTED=true;}
+  catch(e){/* broadcaster failure must not block offline study */}
+}
+addEventListener('wt-akatsuki-loaded',maybeStartBroadcaster);
+addEventListener('online',maybeStartBroadcaster);
+maybeStartBroadcaster();
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const DAY = 864e5;
@@ -10,6 +19,7 @@ const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
+let OFFLINE_MODE=false, OFFLINE_DOWNLOAD_BUSY=false;
 let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 /* an id that is never empty (Japanese or symbol-only names) and never collides with an existing row */
@@ -122,7 +132,24 @@ window.installApp=async()=>{
 };
 /* who is signed in, for the sidebar foot and the Account card */
 const whoText=()=>DEMO?'demo mode — nothing is saved':((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
-window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
+window.signOut=async()=>{
+  if(!DEMO&&window.WTOffline){
+    try{await WTOffline.lockOffline();}catch(e){
+      toast('Offline access could not be locked; do not leave this device shared. '+e.message,7000);
+      return;
+    }
+  }
+  if(OFFLINE_MODE){
+    WTOffline.deactivate();OFFLINE_MODE=false;LOADED=false;
+    SESSION=null;ROLE=null;document.body.classList.remove('study-offline');
+    $('app').classList.add('hide');$('gate').classList.remove('hide');
+    $('offline-launch').classList.add('hide');
+    $('gate-msg').textContent='Offline access locked. Reconnect to sign in again; downloaded data was not deleted.';
+    return;
+  }
+  if(!DEMO)await sb.auth.signOut();
+  location.href=location.pathname;
+};
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
 /* returns the allowlist row, null if not listed, or {error} if unreadable */
@@ -134,30 +161,98 @@ async function authRole(email){
   return (data&&data[0])||null;
 }
 let ADMITTING=false;
+function isOfflineNetworkError(message){
+  return /failed to fetch|network|timeout|timed out|abort|internet|connection|offline/i.test(String(message||''));
+}
+async function offlineEntry(manual=false){
+  if(DEMO||!window.WTOffline)return false;
+  if(LOADED&&!OFFLINE_MODE)return false;
+  try{
+    const owner=await WTOffline.offlineOwner();
+    if(!owner||!await WTOffline.enrolled(owner)||!await WTOffline.assetsReady()){
+      if(manual)$('gate-msg').textContent=
+        'No complete offline pack is available here. Sign in online, open Settings and download from this installed app.';
+      return false;
+    }
+    const p=await WTOffline.pack(owner);
+    if(SESSION&&SESSION.user&&SESSION.user.id!==owner)return false;
+    OFFLINE_MODE=true;WTOffline.activate();
+    SESSION={user:{id:owner,email:p.email||''}};
+    ROLE=p.role||'learner';
+    SUBJECTS=p.subjects.slice();TOPICS=p.topics.slice();PROBLEMS=p.problems.slice();
+    ATTEMPTS=p.attempts.slice();BATCHES=(p.batches||[]).slice();
+    const queued=await WTOffline.queuedAttempts(owner);
+    const ids=new Set(queued.map(r=>r.id));
+    ATTEMPTS=[...queued,...ATTEMPTS.filter(a=>!ids.has(a.id))];
+    LOADED=true;
+    $('gate').classList.add('hide');$('app').classList.remove('hide');
+    $('who').textContent=(p.email||'Learner')+' · offline pack';
+    document.body.classList.add('study-offline');
+    route();
+    return true;
+  }catch(e){
+    if(manual)$('gate-msg').textContent='Offline pack could not open: '+(e.message||e);
+    return false;
+  }
+}
+window.openOfflineStudy=()=>offlineEntry(true);
+$('offline-launch').addEventListener('click',()=>offlineEntry(true));
+async function showOfflineGate(){
+  if(!window.WTOffline||LOADED)return;
+  try{
+    const owner=await WTOffline.offlineOwner();
+    const ready=!!(owner&&await WTOffline.enrolled(owner)&&await WTOffline.assetsReady());
+    $('offline-launch').classList.toggle('hide',!ready);
+  }catch(e){}
+}
 async function admit(s){
-  if(!s||SESSION||DEMO||ADMITTING) return;
-  ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
+  if(!s||SESSION||DEMO||ADMITTING||OFFLINE_MODE)return;
+  ADMITTING=true;
+  try{await admitInner(s);}
+  catch(e){
+    if((!navigator.onLine||isOfflineNetworkError(e.message))&&await offlineEntry())return;
+    $('gate-msg').textContent='Could not sign in: '+(e.message||e);
+  }finally{ADMITTING=false;}
 }
 async function admitInner(s){
-  // boot() is awaited here so a network throw ends in loadError rather than an unhandled rejection
   const email=(s.user&&s.user.email||'').trim();
   const row=await authRole(email);
+  if(OFFLINE_MODE)return;
   if(row&&row.error){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent='Could not read the access list ('+row.error+'). Run sql/'+(/recursion/i.test(row.error)?'auth_allowlist_fix.sql':'auth_allowlist.sql')+'.';
-    await sb.auth.signOut(); return;
+    if((!navigator.onLine||isOfflineNetworkError(row.error))&&await offlineEntry())return;
+    const m=$('gate-msg');m.className='msg err';
+    m.textContent='Could not verify your access ('+row.error+
+      '). Try again online or use a previously downloaded offline pack.';
+    await showOfflineGate(); // a transient network error must not sign out the learner
+    return;
   }
   if(!row){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent=email+' is not on the access list. Ask Aniket to add you.';
-    await sb.auth.signOut(); return;
+    const m=$('gate-msg');m.className='msg err';
+    m.textContent=email+' is not on the access list. Ask the administrator to add you.';
+    if(window.WTOffline)await WTOffline.lockOffline().catch(()=>{});
+    await sb.auth.signOut();return;
   }
-  ROLE=row.role||'operator';
-  SESSION=s;
-  try{ await boot(); }catch(e){ loadError(e.message||String(e)); }
+  ROLE=row.role||'operator';SESSION=s;
+  try{await boot();}
+  catch(e){
+    if((!navigator.onLine||isOfflineNetworkError(e.message))&&await offlineEntry())return;
+    loadError(e.message||String(e));
+  }
 }
-sb.auth.onAuthStateChange((_e,s)=>{ admit(s); });
-sb.auth.getSession().then(({data})=>{ admit(data.session); });
+sb.auth.onAuthStateChange((_event,s)=>{if(!OFFLINE_MODE)admit(s);});
+if(navigator.onLine===false){
+  // Avoid starting a Supabase token refresh when the app is known to be offline.
+  offlineEntry().then(ok=>{if(!ok)showOfflineGate();});
+}else{
+  sb.auth.getSession().then(({data})=>{
+    if(data&&data.session)admit(data.session);
+    else showOfflineGate();
+  }).catch(()=>offlineEntry().then(ok=>{if(!ok)showOfflineGate();}));
+  // Wi-Fi can be connected while the Internet is unavailable. A downloaded
+  // pack offers a bounded fallback rather than leaving the learner at Login.
+  setTimeout(()=>{if(!LOADED)offlineEntry();},6500);
+}
+showOfflineGate();
 
 /* ---------- data ---------- */
 function loadError(msg){
@@ -167,6 +262,7 @@ function loadError(msg){
 }
 window.boot=boot;
 async function boot(){
+  if(OFFLINE_MODE)return; // a late online reply must not replace an opened offline sheet
   $('gate').classList.add('hide'); $('app').classList.remove('hide');
   $('main').innerHTML='<p style="color:var(--mute);margin-top:20px">Loading…</p>';
   $('who').textContent = whoText();
@@ -178,12 +274,25 @@ async function boot(){
       sb.from('written_test_batches').select('*').order('created_at',{ascending:false}),
       sb.from('written_test_subjects').select('*').order('sort_no')
     ]);
+    if(OFFLINE_MODE)return; // offline fallback may have started during the requests
     const bad=[t,p,a].find(r=>r.error);
-    if(bad){ loadError(bad.error.message); return; }
+    if(bad){
+      if((!navigator.onLine||isOfflineNetworkError(bad.error.message))&&await offlineEntry())return;
+      loadError(bad.error.message);return;
+    }
     TOPICS=t.data||[]; PROBLEMS=p.data||[]; ATTEMPTS=a.data||[];
     BATCHES=b.error?[]:(b.data||[]); // tables may not exist until schema.sql is run
     SUBJECTS=s.error?[{id:'maths',sort_no:1,name:'Maths'}]:(s.data||[]);
     if(b.error||s.error) toast('Run schema.sql to enable subjects & batch tracking.', 5000);
+    // Preserve unsynced Hub/Quick marks across reloads. They are explicitly
+    // tagged local-pending and not claimed to be already on the server.
+    if(window.WTOffline){
+      try{
+        const waiting=await WTOffline.queuedAttempts(SESSION.user.id);
+        const ids=new Set(waiting.map(r=>r.id));
+        ATTEMPTS=[...waiting,...ATTEMPTS.filter(a=>!ids.has(a.id))];
+      }catch(e){toast('Could not read offline pending results: '+e.message,6000);}
+    }
   }
   LOADED=true;
   await restoreDir();
@@ -296,6 +405,12 @@ function route(){
   else if(page==='ghost') renderGhost();
   else if(page==='setup') renderSetup();
   else renderLibrary();
+  if(OFFLINE_MODE&&$('main')){
+    const banner=document.createElement('div');
+    banner.className='wt-offline-notice';banner.setAttribute('role','status');
+    banner.textContent='Ready offline · downloaded study data on this device. New results are saved locally and require later synchronization.';
+    $('main').prepend(banner);
+  }
 }
 
 /* ---------- screens ---------- */
@@ -358,7 +473,7 @@ function renderLibrary(){
 window.toggleSub=id=>{ OPEN_SUBS.has(id)?OPEN_SUBS.delete(id):OPEN_SUBS.add(id); renderLibrary(); };
 window.toggleForm=id=>{ const f=$(id); f.classList.toggle('hide'); if(!f.classList.contains('hide')) f.querySelector('input').focus(); };
 /* one submit at a time: the button is disabled while the insert is in flight */
-async function busy(f, fn){ if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
+async function busy(f, fn){ if(OFFLINE_MODE){toast('Library editing needs an online connection. Your downloaded lessons remain available.',5500);return false;} if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
 window.addSubject=e=>{ e.preventDefault(); busy(e.target, ()=>addSubjectNow(e.target)); return false; };
 async function addSubjectNow(f){
   const name=f.name.value.trim(); if(!name) return false;
@@ -438,8 +553,8 @@ function problemForm(tid,p){
     </form>`;
 }
 /* ---------- edit / delete / reorder ---------- */
-async function dbUpdate(table,id,patch){ if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
-async function dbDelete(table,id){ if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
+async function dbUpdate(table,id,patch){ if(OFFLINE_MODE){toast('Connect to edit the Library.',5000);return false;} if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
+async function dbDelete(table,id){ if(OFFLINE_MODE){toast('Connect to edit the Library.',5000);return false;} if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
 window.editProblem=id=>{ EDIT_P=id; route(); setTimeout(()=>{ const el=$('pr-'+id); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },50); };
 window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
   const f=e.target, p=PROBLEMS.find(x=>x.id===id); if(!p) return false;
@@ -509,7 +624,7 @@ function renderBuild(){
     </div>
     <div class="plist">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
-      <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button><a class="btn sm ghost" href="#quick">Quick Practice instead</a>
+      <button class="btn" id="export-btn" ${q.length&&!OFFLINE_MODE?'':'disabled'} onclick="exportBatch()" title="${OFFLINE_MODE?'Connect for tracked PDF export':''}">Export PDF ${DIR?'→ iPad folder':''}</button><a class="btn sm ghost" href="#quick">Quick Practice instead</a>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
     </div><div id="exp-msg" class="msg"></div>
     ${LAST_STUDENT_EXPORT?`<div id="student-download-actions" class="acts" style="margin-top:10px">
@@ -531,7 +646,7 @@ function renderHome(){
   const latest=latestByProblem();
   let weak=0, due=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak') weak++; else if(c==='due') due++; }
   const jp=(typeof JPS!=='undefined')?JPS:{};
-  const jpReadyNow=!DEMO&&typeof jpReady==='function'&&jpReady();
+  const jpReadyNow=!DEMO&&!OFFLINE_MODE&&typeof jpReady==='function'&&jpReady();
   if(jpReadyNow&&!HOME_JP&&typeof jpDueCount==='function'){ HOME_JP=true; jpDueCount().then(()=>{ if(location.hash==='#home'||(!location.hash&&matchMedia('(max-width:760px)').matches)) renderHome(); }); }
   const jpDue=jp.dueCount==null?null:jp.dueCount;
   // accuracy over the last 7 days: Cowork + ghost attempts, plus Japanese sheets from the local log
@@ -557,7 +672,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#analytics">Learning trends</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#setup">Study offline</a><a class="btn sm ghost" href="#analytics">Learning trends</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
@@ -603,6 +718,7 @@ async function batchCoverage(b){
   return coverage;
 }
 window.checkBatchFeedback=async id=>{
+  if(OFFLINE_MODE){toast('Grader verification requires a connection.',5000);return;}
   const b=BATCHES.find(x=>x.id===id);if(!b)return;
   if(!phase1Batch(b)){toast('Legacy batches use manual grading; use Refresh feedback to see new marks.',5500);return;}
   try{
@@ -612,7 +728,7 @@ window.checkBatchFeedback=async id=>{
   }catch(e){toast('Could not check grading: '+(e.message||e),6500);}
 };
 window.refreshFeedback=async()=>{
-  if(FEEDBACK_REFRESHING||DEMO)return;
+  if(FEEDBACK_REFRESHING||DEMO||OFFLINE_MODE){if(OFFLINE_MODE)toast('Reconnect to refresh feedback.',5000);return;}
   FEEDBACK_REFRESHING=true;
   try{
     const [a,b]=await Promise.all([
@@ -627,6 +743,7 @@ window.refreshFeedback=async()=>{
   finally{FEEDBACK_REFRESHING=false;}
 };
 window.setBatchStatus=async(id,status)=>{
+  if(OFFLINE_MODE){toast('Changing batch status requires an online connection.',5500);return;}
   const b=BATCHES.find(x=>x.id===id);if(!b)return;
   if(status==='solved'){
     const ok=await ask({title:'Is your completed PDF in solved/?',
@@ -682,14 +799,14 @@ function renderReview(){
   const fb=shown.map(e=>{
     if(e.kind==='fb'){ const a=e.a, p=PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}, t=TOPICS.find(x=>x.id===a.topic_id)||{};
       return `<div class="fb" style="border-left-color:${a.correct?'var(--ok)':'var(--red)'}" role="link" tabindex="0" onclick="location.hash='topic/${esc(a.topic_id||'')}'" onkeydown="if(event.key==='Enter')this.click()" title="Open ${esc(t.name||'topic')}">
-        <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${stars(a.rating)}
+        <div class="head"><b>${esc(p.subtitle)}</b><span class="chip">${esc(t.name||'')}</span><span class="chip ${a.correct?'ok':'weak'}">${a.correct?'correct':'wrong'}</span>${a.pending_local?'<span class="chip due">Saved locally · pending sync</span>':''}${stars(a.rating)}
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">${esc(a.graded_by||'')} · ${fmtDate(a.graded_at)}</span></div>
         ${a.notes?`<div class="notes">${esc(a.notes)}</div>`:''}
         ${a.correct?'':`<div class="acts"><button class="btn sm ghost" onclick="event.stopPropagation();practise('${esc(a.topic_id)}')">Practise again</button></div>`}</div>`; }
     if(e.kind==='ghost'){ const n=e.items.length, right=e.items.filter(a=>a.correct).length, wrong=e.items.filter(a=>!a.correct);
       const names=wrong.map(a=>esc((PROBLEMS.find(x=>x.id===a.problem_id)||{subtitle:a.problem_id}).subtitle)).join(' · ');
       return `<div class="fb" style="border-left-color:${wrong.length?'var(--amber)':'var(--ok)'}" role="link" tabindex="0" onclick="ghPick('${esc(e.topic_id)}');location.hash='ghost'" onkeydown="if(event.key==='Enter')this.click()" title="Open this sheet in the ghost test">
-        <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>
+        <div class="head"><b>Ghost sheet · ${esc(topicName(e.topic_id)||e.topic_id)}</b><span class="chip ${wrong.length?'due':'ok'}">${right} / ${n}</span><span class="chip">${n} words</span>${e.items.some(a=>a.pending_local)?'<span class="chip due">Saved locally · pending sync</span>':''}
           <span style="margin-left:auto;font-size:11.5px;color:var(--mute)" class="mono">ghost · ${fmtDate(e.graded_at)}</span></div>
         <div class="notes">${wrong.length?'To review: '+names:'Every word right.'}</div></div>`; }
     const s=e.s, wrong=s.items.filter(x=>x.m!==1);
@@ -704,9 +821,9 @@ function renderReview(){
   const tPills=[['all','All topics'],...tids.map(id=>[id,topicName(id)||id])].map(([id,name])=>`<button class="pill-t ${REV.topic===id?'on':''}" aria-pressed="${REV.topic===id}" onclick="REV.topic='${esc(id)}';REV.limit=30;renderReview()">${esc(name)}</button>`).join('');
   const bsel=REV.batch!=='all'?`<button class="pill-t on" onclick="REV.batch='all';renderReview()" title="Clear batch filter">batch: ${esc((BATCHES.find(x=>x.id===REV.batch)||{}).filename||'?')} ✕</button>`:'';
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
-    <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
+    <p style="color:var(--mute);margin:0 0 18px">Cowork feedback and self-checked practice appear here. ${ATTEMPTS.some(a=>a.pending_local)?'<strong>Some results are saved locally and not yet synced.</strong>':''} Tap a batch to see its problems.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
-    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
+    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO||OFFLINE_MODE?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
     <div style="margin:0 0 14px"><a class="btn sm ghost" href="#analytics">View learning analytics</a></div>
     <h2 style="margin:0 0 8px">Feedback</h2>
     <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
@@ -718,12 +835,23 @@ function renderSetup(){
   $('main').innerHTML=`<div class="kicker">Settings</div><h1 style="margin:4px 0 14px">Settings</h1>
     <div class="card account" style="margin:4px 0 18px">
       <h2 style="margin:0 0 4px">Account</h2>
-      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':OFFLINE_MODE?'Studying offline as <b>'+esc(whoText())+'</b>. Your access is not being rechecked until you reconnect.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
+        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':OFFLINE_MODE?'Lock offline access':'Sign out'}</button>
         ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
       </div>
       ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
+    </div>
+    <div class="card wt-offline-card" style="margin:0 0 18px" aria-label="Study offline">
+      <h2 style="margin:0 0 6px">Study offline on iPad</h2>
+      <p style="font-size:13px;color:var(--soft)">Download the app and your current Library while connected. Open this same Home Screen app with no internet, then practise with Apple Pencil or Quick Practice. No website data will be cleared.</p>
+      <div class="acts" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <button class="btn sm" type="button" onclick="downloadOfflineStudy()" ${DEMO||OFFLINE_MODE?'disabled':''}>Download study offline</button>
+        ${OFFLINE_MODE?'<button class="btn sm ghost" type="button" onclick="reconnectStudyOnline()">Reconnect online</button>':''}
+        <button class="btn sm ghost" type="button" onclick="exportOfflinePending()" ${DEMO?'disabled':''}>Export pending results</button>
+      </div>
+      <p id="offline-status" class="wt-offline-status" role="status" aria-live="polite">${OFFLINE_MODE?'Offline pack in use · results remain on this device':'Checking downloaded files…'}</p>
+      <p class="wt-offline-hint">A Ready offline label requires the complete asset download and a previously verified account on this device. Downloads can resume after interruption. Safari and the installed Home Screen app may have separate storage. Local data is not encrypted, so avoid shared devices.</p>
     </div>
     <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
@@ -743,6 +871,7 @@ function renderSetup(){
       </div>
     </div>
 `;
+  updateOfflineStatus();
 }
 window.refreshGraderTask=async()=>{
   try{
@@ -808,6 +937,7 @@ window.downloadGraderKey=async()=>{
   toast('Private grader key downloaded separately. Keep it out of outbox/.',6000);
 };
 async function exportBatch(){
+  if(OFFLINE_MODE){toast('PDF batch tracking requires an online connection. Use Quick Practice or Ghost Test offline.',6000);return;}
   if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   if(!q.length) return;
@@ -1028,3 +1158,69 @@ Legacy WT_ PDFs may not have stable attempt_id values. Do not invent IDs and do 
 
 Never change the Supabase schema, RLS policies or authentication. Never reveal the service-role key.`;
 }
+
+/* ---------- Phase 6 offline download, status and private recovery ---------- */
+async function updateOfflineStatus(){
+  const el=$('offline-status');if(!el||!window.WTOffline)return;
+  try{
+    const owner=SESSION&&SESSION.user&&SESSION.user.id;
+    const p=owner&&await WTOffline.pack(owner);
+    const jobs=owner?await WTOffline.pending(owner):[];
+    const ready=owner&&await WTOffline.enrolled(owner)&&await WTOffline.assetsReady();
+    if(!el.isConnected||OFFLINE_DOWNLOAD_BUSY)return;
+    el.textContent=(ready?'Ready offline':'Not ready offline')+
+      (p&&p.version===WTOffline.version?' · '+p.problems.length+' saved problems · updated '+
+        new Date(p.savedAt).toLocaleString():' · no current study pack')+
+      ' · '+jobs.length+' pending session(s)';
+  }catch(e){if(el.isConnected)el.textContent='Offline status unavailable: '+e.message;}
+}
+window.downloadOfflineStudy=async()=>{
+  if(OFFLINE_DOWNLOAD_BUSY||OFFLINE_MODE||DEMO||!SESSION||!window.WTOffline)return;
+  const el=$('offline-status'),btn=document.querySelector('.wt-offline-card button');
+  OFFLINE_DOWNLOAD_BUSY=true;
+  if(btn)btn.disabled=true;
+  try{
+    if(el)el.textContent='Checking current app files…';
+    const result=await WTOffline.cacheAssets(info=>{
+      if(el&&el.isConnected)el.textContent='Downloading '+info.done+'/'+info.total+
+        ' files · '+info.remaining+' remaining · '+(info.bytes/1048576).toFixed(1)+' MB saved so far';
+    });
+    const p={version:WTOffline.version,id:SESSION.user.id,email:SESSION.user.email,
+      role:ROLE,verified:true,savedAt:new Date().toISOString(),
+      subjects:SUBJECTS,topics:TOPICS,problems:PROBLEMS,
+      attempts:ATTEMPTS.filter(a=>!a.pending_local),batches:BATCHES};
+    await WTOffline.savePack(p);
+    toast('Ready offline: '+p.problems.length+' problems and '+
+      result.files+' app files ('+(result.bytes/1048576).toFixed(1)+' MB).',6500);
+  }catch(e){
+    toast('Offline download incomplete; previously saved data was kept: '+(e.message||e),8500);
+    if(el&&el.isConnected)el.textContent='Download incomplete — retry to resume missing files. '+(e.message||e);
+  }finally{
+    OFFLINE_DOWNLOAD_BUSY=false;if(btn&&btn.isConnected)btn.disabled=false;
+    updateOfflineStatus();
+  }
+};
+window.exportOfflinePending=async()=>{
+  if(DEMO||!SESSION||!window.WTOffline)return;
+  try{
+    const jobs=await WTOffline.pending(SESSION.user.id);
+    if(!jobs.length){toast('No pending offline sessions to export.',4500);return;}
+    const ok=await ask({title:'Export private offline results?',
+      body:'<p>This JSON contains your answers, marks, account ID and possibly Japanese writing records. Keep it private. Exporting does not upload, acknowledge or delete any pending session.</p>',
+      ok:'Export private backup',cancel:'Not now'});
+    if(!ok)return;
+    const blob=new Blob([JSON.stringify({format:'wt-offline-pending-v6',
+      owner:SESSION.user.id,exportedAt:new Date().toISOString(),sessions:jobs},null,2)],
+      {type:'application/json'});
+    download(blob,'LearningHub_pending_'+new Date().toISOString().slice(0,10)+'.json');
+    toast('Private pending-results backup downloaded. Results remain queued.',6500);
+  }catch(e){toast('Could not export pending results: '+(e.message||e),7500);}
+};
+window.reconnectStudyOnline=async()=>{
+  if(!OFFLINE_MODE)return;
+  if(navigator.onLine===false){toast('Connect to Wi-Fi or mobile data first.',5000);return;}
+  const ok=await ask({title:'Reload and verify your account online?',
+    body:'<p>Save any unfinished handwriting before reloading. The downloaded pack, IndexedDB drafts and pending sessions will not be cleared. You may need to sign in again.</p>',
+    ok:'Reconnect and reload',cancel:'Keep studying offline'});
+  if(ok)location.reload();
+};

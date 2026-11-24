@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="css/learning_hub.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" crossorigin="anonymous"></script>
@@ -32,6 +32,8 @@
     <div id="gate-msg" class="msg" role="status" aria-live="polite"></div>
     <p style="margin:12px 0 0;font-size:12.5px"><a href="#" id="email-toggle">Use an email link instead</a></p>
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+          <button id="offline-launch" type="button" class="btn sm ghost hide" style="margin-top:14px">Open downloaded study offline</button>
+    <p id="offline-gate-help" class="msg" role="status" aria-live="polite"></p>
       <button id="demo-btn" class="btn ghost sm">Explore with sample data</button>
     </div>
   </div>
@@ -59,9 +61,10 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <dialog id="ask" class="ask" aria-labelledby="ask-t" aria-describedby="ask-b"><form method="dialog"><h2 id="ask-t"></h2><div id="ask-b"></div><input id="ask-in" class="hide" autocomplete="off"><div class="ask-acts"><button value="cancel" class="btn sm ghost" id="ask-no"></button><button value="alt" class="btn sm ghost hide" id="ask-alt"></button><button value="ok" class="btn sm" id="ask-ok"></button></div></form></dialog>
 <script>if(!window.supabase||!window.jspdf){document.getElementById("gate-msg").className="msg err";document.getElementById("gate-msg").textContent="A library failed to load from the CDN. Check your connection and reload.";}</script>
-<script src="https://celeritas7.github.io/Akatsuki/js/akatsuki-broadcast.js"></script>
+<script async src="https://celeritas7.github.io/Akatsuki/js/akatsuki-broadcast.js" onload="window.dispatchEvent(new Event('wt-akatsuki-loaded'))"></script>
 <script src="js/worksheet_handoff.js"></script>
 <script src="js/learning_analytics.js"></script>
+<script src="js/offline_store.js"></script>
 <script src="js/learning_hub.js"></script>
 <script src="js/analytics_view.js"></script>
 <script>if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>

@@ -1,52 +1,93 @@
-/* Learning Hub service worker — makes the app installable and lets it open
-   with no connection.
-
-   - App files (this folder): network first, so a deploy shows up on the next
-     open; the cached copy is used only when the network fails.
-   - Pinned CDN libraries and the PDF font: cache first — their URLs carry an
-     exact version, so a cached copy is never stale.
-   - Supabase and everything else: never touched. Data always comes live;
-     offline, the app shows its own "Couldn't load your data" card. */
-const VERSION = 'lh-v2-phase5';
-const SHELL = [
-  './', 'index.html', 'manifest.webmanifest',
-  'css/learning_hub.css',
-  'js/multilingual_core.js', 'js/multilingual_packs.js',
-  'js/worksheet_handoff.js', 'js/learning_analytics.js', 'js/learning_hub.js', 'js/analytics_view.js', 'js/quick_practice.js', 'js/ghost_test.js', 'js/japanese_source.js',
-  'icons/icon-192.png', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'
+/* Learning Hub · Phase 6 iPad offline shell.
+ * Never cache Supabase API data, tokens or user-owned answers in the worker.
+ * Keep older cache namespaces, IndexedDB and study drafts untouched.
+ * A completed user-requested download lives in wt-ipad-assets-phase6. */
+const VERSION='lh-v2-phase6';
+const OFFLINE_CACHE='wt-ipad-assets-phase6';
+const SHELL=[
+  './','index.html','manifest.webmanifest','css/learning_hub.css',
+  'js/multilingual_core.js','js/multilingual_packs.js',
+  'js/worksheet_handoff.js','js/learning_analytics.js','js/offline_store.js',
+  'js/learning_hub.js','js/analytics_view.js','js/quick_practice.js',
+  'js/ghost_test.js','js/japanese_source.js',
+  'icons/icon-192.png','icons/favicon-32.png','icons/apple-touch-icon.png'
 ];
-const PINNED = [
+const PINNED=[
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
-  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+  'fonts/NotoSansJP-Regular.ttf'
 ];
-
-self.addEventListener('install', e => {
-  // the app files must all cache; the CDN copies are best effort, so a CDN hiccup never blocks install
-  e.waitUntil(caches.open(VERSION)
-    .then(c => c.addAll(SHELL).then(() => Promise.allSettled(PINNED.map(u => c.add(u)))))
-    .then(() => self.skipWaiting()));
+const networkTimeout=4500;
+const indexUrl=new URL('index.html',self.registration.scope).href;
+const localAssetUrls=new Set([...SHELL,...PINNED.filter(p=>!/^https:/.test(p))]
+  .map(p=>new URL(p,self.registration.scope).href));
+const pinnedUrls=new Set(PINNED.map(p=>new URL(p,self.registration.scope).href));
+self.addEventListener('install',event=>{
+  event.waitUntil(caches.open(VERSION)
+    .then(c=>c.addAll(SHELL)
+      .then(()=>Promise.allSettled(PINNED.map(u=>c.add(u)))))
+    .then(()=>self.skipWaiting()));
 });
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
+self.addEventListener('activate',event=>{
+  // Previous versions deleted every other cache, including manual downloads.
+  // Never remove old study packs or cache namespaces during an app update.
+  event.waitUntil(self.clients.claim());
 });
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  const pinned = PINNED.includes(req.url) || url.pathname.endsWith('/fonts/NotoSansJP-Regular.ttf');
-  if (pinned) {
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+async function fromCache(req){
+  const current=await caches.open(VERSION);
+  const fresh=await current.match(req,{ignoreSearch:true});
+  if(fresh)return fresh;
+  const packs=await caches.open(OFFLINE_CACHE);
+  return packs.match(req,{ignoreSearch:true});
+}
+async function navigation(req){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),networkTimeout);
+  try{
+    const res=await fetch(req,{signal:controller.signal});
+    if(!res.ok)throw Error('Navigation unavailable');
+    const c=await caches.open(VERSION);
+    await c.put(indexUrl,res.clone());
+    return res;
+  }catch(e){
+    const cached=await fromCache(req)||await fromCache(indexUrl);
+    return cached||Response.error();
+  }finally{clearTimeout(timeout);}
+}
+self.addEventListener('fetch',event=>{
+  const req=event.request;
+  if(req.method!=='GET')return;
+  const url=new URL(req.url);
+  if(pinnedUrls.has(url.href)){
+    event.respondWith((async()=>{
+      const cached=await fromCache(req);
+      if(cached)return cached;
+      const res=await fetch(req);
+      if(res.ok&&res.type!=='opaque'){
+        const c=await caches.open(VERSION);
+        await c.put(req,res.clone());
+      }
       return res;
-    })));
+    })());
     return;
   }
-  if (url.origin !== self.location.origin) return;            // Supabase, fonts.googleapis, …
-  e.respondWith(fetch(req).then(res => {
-    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
-    return res;
-  }).catch(() => caches.match(req, { ignoreSearch: true })
-    .then(hit => hit || (req.mode === 'navigate' ? caches.match('index.html') : Response.error()))));
+  // External APIs, OAuth and all user/project data remain network-only.
+  if(url.origin!==self.location.origin)return;
+  if(req.mode==='navigate'){
+    event.respondWith(navigation(req));
+    return;
+  }
+  if(!localAssetUrls.has(url.href))return;
+  event.respondWith((async()=>{
+    const cached=await fromCache(req);
+    if(cached)return cached;
+    try{
+      const res=await fetch(req);
+      if(res.ok){
+        const c=await caches.open(VERSION);
+        await c.put(req,res.clone());
+      }
+      return res;
+    }catch(e){return Response.error();}
+  })());
 });

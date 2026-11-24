@@ -6,9 +6,18 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 
 ## Run it
 - **Hosted:** open the deployed `index.html` in Chrome or Edge and sign in (Google, or an email link). "Explore with sample data" shows the whole app without touching your data.
-- **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
+- **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). Before going offline, open the installed app online and use **Settings → Download study offline**. A first visit or install alone does **not** make the Library available offline.
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 6: reliable offline startup and study packs on iPad
+
+In the **installed Home Screen app** (or Safari tab you will actually reopen offline), sign in while connected, then open **Settings → Study offline on iPad → Download study offline**. The download checks all current app scripts and assets, shows a file/MB progress indicator, resumes after interruption and stores a previously verified, versioned Library snapshot. Only a complete pack is labeled **Ready offline**. Reopen that same app in airplane mode to study.
+
+Offline Home, Library, Review, Analytics, Hub Ghost Test and Quick Practice use downloaded content. You may also save a Japanese Ghost Test sheet while online and open it later from **Ghost Test → Saved Japanese sheet**. Imported multilingual writing packs retain their existing device-local storage.
+
+**Offline answers are saved locally, not synced.** Hub/Quick/Japanese attempts and Pencil strokes are queued with stable IDs and can be exported using **Settings → Export pending results**. Quick Practice can complete multiple sessions. Reconnect manually to reverify your account; do not clear site data or uninstall while results are pending. Automatic, conflict-safe synchronization is deliberately postponed to **Phase 7**.
+
+The offline cache and IndexedDB schema are reconciled with the earlier unmerged PR #5, but that outdated branch should **not** also be merged. Account-keyed local storage is not encrypted and cannot be remotely revoked while a device has no connection. The [Phase 6 airplane-mode acceptance guide](docs/phase6-ipad-offline.md) requires real iPad testing before merging or deploying.
 ## Phase 5: iPad UI, Apple Pencil and accessibility
 
 The Ghost Test now exposes Japanese sets, language packs and Hub topics even on narrow mobile screens. The handwriting canvas isolates the active Pencil pointer from palm touches, preserves meaningful strokes when a gesture is canceled, and prevents ink changes while a save is awaiting confirmation. Numbered mark targets are native buttons for iPad VoiceOver and hardware keyboards.
@@ -78,6 +87,7 @@ css/learning_hub.css       all styles (responsive rules in §8)
 js/learning_hub.js         auth, data, Home / Library / Build / Review / Settings, PDF export
 js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/quick_practice.js     timed self-rating, draft recovery, safe attempt syncing
+js/offline_store.js      existing IndexedDB pack schema, offline asset download and pending queue
 js/multilingual_core.js   portable vocabulary import format and evidence contract
 js/multilingual_packs.js  local per-account packs, handwriting mode picker, export
 js/learning_analytics.js  data-only calculations: dates, methods, repeated mistakes
@@ -86,7 +96,7 @@ js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, s
 js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
 fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
 manifest.webmanifest       install metadata (name, colours, icons)
-sw.js                      service worker: offline app shell, never caches Supabase data
+sw.js                      service worker: cached current app shell, bounded offline navigation; no Supabase API caching
 icons/                     app icons (筆 on the app green)
 worksheets/*.html          standalone practice sheets
 ghost-test-20-standalone.html  self-contained ghost test

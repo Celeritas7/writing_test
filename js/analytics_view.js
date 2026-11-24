@@ -85,7 +85,7 @@
       choices+'</select></div><div><span class="an-control-label">Reporting window</span><div class="pillbar">'+
       periods+'</div></div></div>'+
       '<div class="an-toolbar"><button class="btn sm ghost" id="an-refresh" '+
-      (STATE.busy||DEMO?'disabled':'')+'>'+(STATE.busy?'Refreshing…':'Refresh complete history')+
+      (STATE.busy||DEMO||window.WTOffline&&WTOffline.isActive()?'disabled':'')+'>'+(STATE.busy?'Refreshing…':'Refresh complete history')+
       '</button><button class="btn sm ghost" id="an-download" type="button">Download text report</button>'+
       '<span class="an-muted">'+(STATE.complete?'History refreshed '+
         new Date(STATE.refreshedAt).toLocaleString():
@@ -138,7 +138,7 @@
     });
   };
   async function refreshAnalytics(){
-    if(STATE.busy||DEMO||!SESSION)return;
+    if(STATE.busy||DEMO||!SESSION||window.WTOffline&&WTOffline.isActive())return;
     const currentOwner=SESSION.user.id,rows=[];
     STATE.busy=true;STATE.error=null;
     if(active())window.renderAnalytics();
