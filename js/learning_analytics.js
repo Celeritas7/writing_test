@@ -58,6 +58,8 @@
     const previous=history.filter(a=>a.day>=start-days&&a.day<start);
     const latest=new Map();
     for(const a of history)if(!latest.has(a.problem_id))latest.set(a.problem_id,a);
+    const latestObj=Object.fromEntries(latest);
+    const stateByProblem=new Map();
     const statuses={weak:0,due:0,new:0,ok:0};
     const byTopic=new Map();
     for(const p of bank){
@@ -74,7 +76,7 @@
       if(last)entry.reviewed++;
       let state=last?'ok':'new';
       if(statusOf){
-        const calculated=statusOf(p,Object.fromEntries(latest));
+        const calculated=statusOf(p,latestObj);
         state=calculated&&calculated.code||state;
       }else if(last){
         if(last.correct===false||last.rating!=null&&last.rating<=2)state='weak';
@@ -84,7 +86,7 @@
         }
       }
       if(!(state in statuses))state='ok';
-      statuses[state]++;entry[state]++;
+      statuses[state]++;entry[state]++;stateByProblem.set(p.id,state);
       byTopic.set(p.topic_id,entry);
     }
     const byProblem=new Map();
@@ -110,9 +112,7 @@
     const focus=bank.map(p=>{
       const t=byTopic.get(p.topic_id),e=byProblem.get(p.id);
       const last=latest.get(p.id);
-      const state=(!last?'new':(last.correct===false||last.rating!=null&&last.rating<=2)?'weak':
-        (!statusOf?((last.day+({1:1,2:1,3:3,4:7,5:14}[Math.round(last.rating||3)]||3)<=today)?'due':'ok'):
-        (statusOf(p,Object.fromEntries(latest))||{}).code));
+      const state=stateByProblem.get(p.id)||'new';
       return {id:p.id,topicId:p.topic_id,topicName:t.name,
         subtitle:p.subtitle||p.prompt||p.id,state,misses:e?.misses||0,
         attempts:e?.attempts||0,notes:e?.latestFeedback||'',lastAt:last?.graded_at||null,
