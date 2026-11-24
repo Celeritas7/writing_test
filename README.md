@@ -13,14 +13,14 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 1. **Supabase** — run `sql/schema.sql` in the SQL editor of your project (the `sql/` folder is git-ignored; keep it locally). It creates `written_test_subjects / topics / problems / attempts / batches` and the write policies the app needs.
 2. **Keys** — `js/learning_hub.js` holds the project URL and anon key; `js/ghost_test.js` holds the Japanese project's URL, anon key and your user id (defaults — Connection settings in the Ghost test override them).
 3. **iCloud folder** — create `iCloud Drive/WrittenTest`, then **Settings → Link folder** in the app. It creates `outbox/ solved/ graded/ grader/` and writes `COWORK_TASK.md`. After a reload Chrome asks for one click to reconnect; Settings and Build offer it.
-4. **Cowork** — point Claude Cowork at `COWORK_TASK.md` and keep the Supabase service-role key at `~/.config/writtentest/service_role_key` (never inside the synced folder). Reference answers are in `grader/`, never in `outbox/`.
+4. **Cowork** — point Claude Cowork at `COWORK_TASK.md` and keep the Supabase service-role key at `~/.config/writtentest/service_role_key` (never inside the synced folder). Reference answers are in `grader/`, never in `outbox/`. **Important:** a shared iCloud parent folder also shares its `grader/` subfolder; it is not an access-control boundary. Do not share this folder with learners.
 
 ## Screens
 | Screen | What it does |
 |---|---|
 | **Home** | Due today + Start, streak, 7-day accuracy, last sheet's marks. Phones open here; the Home tab shows the due count as a badge. |
 | **Library** | Subjects → topics → problems. Add, rename, reorder, edit, delete. Multi-line prompts. |
-| **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF (+ manifest) to `outbox/`, or downloads both. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
+| **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF and answer-free manifest to `outbox/`, or downloads both. Browser downloads **never** automatically include answer keys; the separate private grader key requires a deliberate confirmation. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
 | **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
 | **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
 | **Settings** | **Account** first (who is signed in, Sign out, Install app), then the loop, folder link / reconnect and grader instructions. |
@@ -49,3 +49,10 @@ phases.md                  ghost-test design notes
 run-written-test-local.bat local server (Windows)
 sql/                       schema and policies — git-ignored, keep locally
 ```
+
+## Phase 0: safe saving and private answers
+
+- When the browser downloads a worksheet, it downloads the student PDF and an **answer-free JSON manifest**. To grade with Cowork, use the separately confirmed **Download private grader key** action immediately after exporting on a trusted device. Move `WT_…-grader.json` into your private `grader/` directory and rename it to match the student manifest's basename (`WT_….json`). Keep this key out of `outbox/`.
+- A missing Japanese connection, failed preflight read, or failed review write must keep the handwriting draft and show an error. Each save attempt records a stable ID in its history so retries do not increment already-committed answers twice.
+- Japanese study data in the Technical Supabase project currently has permissive anonymous-review policies; **do not assume the cross-project integration is private**. A staged RLS/authentication migration is described in [docs/phase0-security-audit.md](docs/phase0-security-audit.md). It has **not** been applied.
+- These changes are independent of the unmerged iPad offline PR #5.
