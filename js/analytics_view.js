@@ -161,7 +161,7 @@
       }
       if(!SESSION||SESSION.user.id!==currentOwner)throw new Error('Account changed during refresh');
       const seen=new Set();
-      ATTEMPTS=rows.filter(a=>{
+      let nextAttempts=rows.filter(a=>{
         if(!a||!a.id)return !!a;
         if(seen.has(a.id))return false;
         seen.add(a.id);return true;
@@ -169,8 +169,10 @@
       if(window.WTOffline&&SESSION&&SESSION.user.id===currentOwner){
         const pending=await WTOffline.queuedAttempts(currentOwner);
         const ids=new Set(pending.map(r=>r.id));
-        ATTEMPTS=[...pending,...ATTEMPTS.filter(r=>!ids.has(r.id))];
+        nextAttempts=[...pending,...nextAttempts.filter(r=>!ids.has(r.id))];
       }
+      // Never replace visible history if retrieving local pending data fails.
+      ATTEMPTS=nextAttempts;
       STATE.complete=true;STATE.refreshedAt=Date.now();
     }catch(err){STATE.error='Refresh incomplete. Previously loaded results were kept. '+(err.message||err);}
     finally{STATE.busy=false;if(active())window.renderAnalytics();}
