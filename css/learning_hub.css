@@ -628,3 +628,8 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
     animation-duration:.01ms!important;animation-iteration-count:1!important;
     transition-duration:.01ms!important}
 }
+
+/* Accessible route status without creating an extra grid column. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
