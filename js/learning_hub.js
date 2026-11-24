@@ -789,11 +789,13 @@ async function exportBatchNow(q, m){
   if(DIR){
     try{
       const out=await DIR.getDirectoryHandle('outbox',{create:true});
+      const gr=await DIR.getDirectoryHandle('grader',{create:true});
+      // Private key and student manifest must exist before publishing the PDF
+      // that triggers the grader's folder watcher.
+      await writeText(gr, jname, key);
+      await writeText(out, jname, manifest);
       const fh=await out.getFileHandle(fname,{create:true});
       const w=await fh.createWritable(); await w.write(blob); await w.close();
-      await writeText(out, jname, manifest);
-      const gr=await DIR.getDirectoryHandle('grader',{create:true});
-      await writeText(gr, jname, key);
       dest='outbox/ (syncing to iPad)'; written=true;
     }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
   }
