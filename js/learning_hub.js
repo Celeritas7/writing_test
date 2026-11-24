@@ -555,10 +555,68 @@ const fmtDate=d=>{ const x=new Date(d); return isNaN(x)?'—':x.toLocaleDateStri
 function topicSubject(tid){ const t=TOPICS.find(x=>x.id===tid); return t?subjectOf(t):null; }
 /* Build view pre-filtered to one topic: weak problems rank first, so a wrong answer lands at the top */
 window.practise=tid=>{ buildSel.topic=tid; buildSel.subject=topicSubject(tid)||'all'; location.hash='build'; if(location.hash==='#build') renderBuild(); };
+/* Phase 1: legacy batches predate deterministic grading IDs. Keep their
+ * explicit manual status workflow; verify complete feedback for WT2 batches. */
+let BATCH_COVERAGE={}, FEEDBACK_REFRESHING=false;
+const phase1Batch=b=>!!b&&/^WT2_/.test(b.filename||'');
+async function batchCoverage(b){
+  const ids=await Promise.all([...new Set(b.problem_ids||[])].map(p=>WTWorksheet.attemptId(b.id,p)));
+  if(!ids.length)throw new Error('Batch has no questions');
+  const {data,error}=await sb.from('written_test_attempts').select('*').in('id',ids);
+  if(error)throw error;
+  const coverage=await WTWorksheet.coverage(b,data||[]);
+  BATCH_COVERAGE[b.id]={...coverage,checkedAt:Date.now()};
+  const found=new Set((data||[]).map(a=>a.id));
+  ATTEMPTS=[...ATTEMPTS.filter(a=>!found.has(a.id)),...(data||[])].sort(
+    (a,b)=>new Date(b.graded_at)-new Date(a.graded_at));
+  return coverage;
+}
+window.checkBatchFeedback=async id=>{
+  const b=BATCHES.find(x=>x.id===id);if(!b)return;
+  if(!phase1Batch(b)){toast('Legacy batches use manual grading; use Refresh feedback to see new marks.',5500);return;}
+  try{
+    const coverage=await batchCoverage(b);
+    toast(coverage.done+' of '+coverage.total+' grading results confirmed for '+b.filename,5500);
+    REV.open=id;renderReview();
+  }catch(e){toast('Could not check grading: '+(e.message||e),6500);}
+};
+window.refreshFeedback=async()=>{
+  if(FEEDBACK_REFRESHING||DEMO)return;
+  FEEDBACK_REFRESHING=true;
+  try{
+    const [a,b]=await Promise.all([
+      sb.from('written_test_attempts').select('*').order('graded_at',{ascending:false}),
+      sb.from('written_test_batches').select('*').order('created_at',{ascending:false})
+    ]);
+    if(a.error||b.error)throw a.error||b.error;
+    ATTEMPTS=a.data||[];BATCHES=b.data||[];
+    BATCH_COVERAGE={};
+    renderReview();toast('Feedback and batch status refreshed.');
+  }catch(e){toast('Refresh failed; existing feedback kept: '+(e.message||e),6500);}
+  finally{FEEDBACK_REFRESHING=false;}
+};
 window.setBatchStatus=async(id,status)=>{
-  const b=BATCHES.find(x=>x.id===id); if(!b) return;
-  if(!DEMO){ const {error}=await sb.from('written_test_batches').update({status}).eq('id',id); if(error){ toast('Could not update batch: '+error.message,5000); return; } }
-  b.status=status; toast('Batch marked '+status+'.'); renderReview();
+  const b=BATCHES.find(x=>x.id===id);if(!b)return;
+  if(status==='solved'){
+    const ok=await ask({title:'Is your completed PDF in solved/?',
+      body:'<p>Save the annotated PDF to <b>solved/</b> using the iPad Files app. This button records your confirmation; the browser cannot verify the iCloud folder on iPad Safari.</p>',
+      ok:'Yes, saved in solved/',cancel:'Not yet'});
+    if(!ok)return;
+  }
+  if(status==='graded'&&phase1Batch(b)&&!DEMO){
+    try{
+      const coverage=await batchCoverage(b);
+      if(coverage.done!==coverage.total){
+        toast('Not marked graded: '+coverage.done+' of '+coverage.total+' verified Cowork results. Check the grader first.',7500);
+        REV.open=id;renderReview();return;
+      }
+    }catch(e){toast('Could not verify grading: '+(e.message||e),6500);return;}
+  }
+  if(!DEMO){
+    const {error}=await sb.from('written_test_batches').update({status}).eq('id',id);
+    if(error){toast('Could not update batch: '+error.message,5000);return;}
+  }
+  b.status=status;toast('Batch marked '+status+'.');renderReview();
 };
 function renderReview(){
   const topicName=id=>(TOPICS.find(t=>t.id===id)||{}).name||'';
@@ -568,11 +626,15 @@ function renderReview(){
     const open=REV.open===b.id;
     const probs=(b.problem_ids||[]).map(id=>{ const p=PROBLEMS.find(x=>x.id===id)||{subtitle:id}; const s=pstatus(p,latest);
       return `<li><span>${esc(p.subtitle)}</span><span class="chip ${s.code==='weak'?'weak':s.code==='due'?'due':s.code==='ok'?'ok':'new'}">${esc(s.label)}</span></li>`; }).join('');
-    const next=b.status==='exported'?['solved','Mark solved']:b.status==='solved'?['graded','Mark graded']:null;
+    const next=b.status==='exported'?['solved','I saved it in solved/']:b.status==='solved'?['graded',phase1Batch(b)?'Confirm graded':'Mark graded (legacy)']:null;
+    const c=BATCH_COVERAGE[b.id], done=c?c.done:0, total=c?c.total:(b.problem_ids||[]).length;
+    const verifyBtn=phase1Batch(b)?`<button class="btn sm ghost" onclick="event.stopPropagation();checkBatchFeedback('${esc(b.id)}')">Check feedback${c?' ('+done+'/'+total+')':''}</button>`:'';
+    const nextButton=next?`<button class="btn sm ghost" onclick="event.stopPropagation();setBatchStatus('${esc(b.id)}','${next[0]}')" ${next[0]==='graded'&&phase1Batch(b)&&(!c||c.done!==c.total)?'disabled title="Check feedback first"':''}>${next[1]}</button>`:'';
     return `<tr class="brow" tabindex="0" role="button" aria-expanded="${open}" onclick="REV.open=REV.open==='${esc(b.id)}'?null:'${esc(b.id)}';renderReview()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
       <td class="mono" style="font-size:12px">${esc(b.filename)}</td><td>${esc(topicName(b.topic_id)||'mixed')}</td><td>${(b.problem_ids||[]).length}</td><td><span class="chip status-${esc(b.status)}">${esc(b.status)}</span></td><td style="color:var(--mute)">${fmtDate(b.created_at)}</td></tr>
       ${open?`<tr class="bopen"><td colspan="5"><ul class="blist">${probs||'<li style="color:var(--mute)">No problems recorded for this batch.</li>'}</ul>
-        <div class="acts">${next?`<button class="btn sm ghost" onclick="event.stopPropagation();setBatchStatus('${esc(b.id)}','${next[0]}')">${next[1]}</button>`:''}<button class="btn sm ghost" onclick="event.stopPropagation();REV.batch='${esc(b.id)}';REV.open=null;renderReview()">Show its feedback</button></div></td></tr>`:''}`;
+        <div class="acts">${nextButton}${verifyBtn}<button class="btn sm ghost" onclick="event.stopPropagation();REV.batch='${esc(b.id)}';REV.open=null;renderReview()">Show its feedback</button></div>
+        ${phase1Batch(b)?`<p style="font-size:12px;color:var(--mute)">${c?'Verified '+done+' of '+total+' grading results':'Use Check feedback after Cowork processes the solved PDF. Only verified complete batches can be marked graded.'}</p>`:''}</td></tr>`:''}`;
   }).join('');
   // ---- feedback entries
   let list=ATTEMPTS.filter(a=>(REV.topic==='all'||a.topic_id===REV.topic)&&(!REV.wrong||!a.correct));
@@ -613,6 +675,7 @@ function renderReview(){
   $('main').innerHTML=`<div class="kicker">Review</div><h1 style="margin:4px 0 6px">Batches & feedback</h1>
     <p style="color:var(--mute);margin:0 0 18px">Everything Cowork grades appears here and feeds the ranking of your next batch. Tap a batch row to see what was in it.</p>
     ${BATCHES.length?`<div class="card" style="margin-bottom:18px;padding:10px 16px;overflow-x:auto"><table class="tbl"><thead><tr><th>File</th><th>Topic</th><th>Problems</th><th>Status</th><th>Exported</th></tr></thead><tbody>${bRows}</tbody></table></div>`:''}
+    <div class="acts" style="margin:4px 0 16px"><button class="btn sm ghost" onclick="refreshFeedback()" ${DEMO?'disabled':''}>Refresh feedback from Supabase</button><span style="font-size:12px;color:var(--mute)">Shows results recorded by Cowork; no iPad folder access required</span></div>
     <h2 style="margin:0 0 8px">Feedback</h2>
     <div class="revbar">${tPills}<button class="pill-t ${REV.wrong?'on':''}" aria-pressed="${REV.wrong}" onclick="REV.wrong=!REV.wrong;REV.limit=30;renderReview()">${REV.wrong?'✓ ':''}Wrong only</button>${bsel}</div>
     ${fb}
@@ -710,9 +773,10 @@ async function exportBatchNow(q, m){
   const two=n=>String(n).padStart(2,'0');
   const stamp=`${now.getFullYear()}${two(now.getMonth()+1)}${two(now.getDate())}_${two(now.getHours())}${two(now.getMinutes())}`; // local time, matches the Review table
   const topicSlug=buildSel.topic!=='smart'?buildSel.topic:(buildSel.subject!=='all'?buildSel.subject+'_mix':'mix');
-  const fname=`WT_${topicSlug}_${stamp}.pdf`;
+  const safeTopic=String(topicSlug).replace(/[^a-z0-9_-]/gi,'_').slice(0,45);
   if(!crypto.randomUUID) throw new Error('Secure connection required for batch IDs');
   const batchId=crypto.randomUUID();
+  const fname=`WT2_${safeTopic}_${stamp}_${batchId.slice(0,8)}.pdf`;
   if(!DIR&&DIR_PENDING) await reconnectDir(); // still inside the click's user activation
   const blob=await makePdf(q, fname, batchId);
   const jname=fname.replace(/\.pdf$/,'.json');
