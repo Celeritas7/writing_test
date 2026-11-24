@@ -5,14 +5,14 @@
 (function(){
   'use strict';
   const DB='wt-ipad-offline-v1',VERSION=1,PACK_VERSION=6;
-  const CACHE='wt-ipad-assets-phase6';
+  const CACHE='wt-ipad-assets-phase7';
   const AUTH_KEY='sb-wylxvmkcrexwfpjpbhyy-auth-token';
   const FILES=[
     './','index.html','manifest.webmanifest','css/learning_hub.css',
     'js/worksheet_handoff.js','js/learning_analytics.js','js/learning_hub.js',
     'js/analytics_view.js','js/quick_practice.js','js/multilingual_core.js',
     'js/ghost_test.js','js/japanese_source.js','js/multilingual_packs.js',
-    'js/offline_store.js','icons/icon-192.png','icons/favicon-32.png',
+    'js/offline_store.js','js/offline_sync.js','icons/icon-192.png','icons/favicon-32.png',
     'icons/apple-touch-icon.png','fonts/NotoSansJP-Regular.ttf',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
     'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
@@ -115,6 +115,62 @@
     await op('pending','put',entry);
     return entry;
   }
+  /* A receipt and pending-job removal are committed in ONE IndexedDB
+     transaction. A lost network acknowledgement never removes the job. */
+  async function acknowledge(owner,id,proof){
+    if(!owner||!id||!proof||!Array.isArray(proof.ids)||
+       !proof.ids.length||!proof.ids.every(x=>typeof x==='string')||
+       !proof.confirmedAt||!Number.isFinite(Date.parse(proof.confirmedAt)))
+      throw Error('A verified read-back proof is required before acknowledgement');
+    const db=await database();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(['pending','meta'],'readwrite');
+      const store=tx.objectStore('pending'),meta=tx.objectStore('meta');
+      const abort=err=>{
+        try{tx.abort();}catch(e){}
+      };
+      const jobReq=store.get(id);
+      jobReq.onsuccess=()=>{
+        const job=jobReq.result;
+        if(!job||job.owner!==owner||!['hub','quick'].includes(job.kind)||
+           !Array.isArray(job.rows)||!job.rows.length){
+          abort();return;
+        }
+        const expected=job.rows.map(r=>r.id).sort();
+        const actual=proof.ids.slice().sort();
+        if(expected.length!==actual.length||
+           expected.some((id,i)=>id!==actual[i])){
+          abort();return;
+        }
+        const recKey='sync-receipts:'+owner;
+        const r=meta.get(recKey);
+        r.onsuccess=()=>{
+          const prior=r.result&&Array.isArray(r.result.receipts)?r.result.receipts:[];
+          const receipt={
+            jobId:id,kind:job.kind,owner,ids:actual,
+            confirmedAt:proof.confirmedAt
+          };
+          meta.put({id:recKey,receipts:[...prior.filter(x=>x.jobId!==id),receipt]});
+          store.delete(id);
+        };
+      };
+      tx.oncomplete=()=>resolve(true);
+      tx.onabort=()=>reject(Error('Acknowledgement was not committed; local results retained'));
+      tx.onerror=()=>reject(tx.error||Error('Acknowledgement transaction failed'));
+    });
+  }
+  async function receipts(owner){
+    const entry=owner&&await op('meta','get','sync-receipts:'+owner);
+    return entry&&Array.isArray(entry.receipts)?entry.receipts:[];
+  }
+  async function setSyncPreference(owner,enabled){
+    if(!owner)throw Error('Missing account');
+    await op('meta','put',{id:'sync-pref:'+owner,enabled:enabled===true});
+  }
+  async function getSyncPreference(owner){
+    const row=owner&&await op('meta','get','sync-pref:'+owner);
+    return !!(row&&row.enabled===true);
+  }
   async function queuedAttempts(owner){
     const jobs=await pending(owner);
     const ids=new Set(),out=[];
@@ -171,7 +227,8 @@
   window.WTOffline={
     storedUser,verifiedUser,offlineOwner,enrolled,lockOffline,
     pack,japanese,savePack,saveJapanese,
-    pending,queue,queuedAttempts,cacheAssets,assetsReady,downloadFiles,
+    pending,queue,queuedAttempts,acknowledge,receipts,
+    setSyncPreference,getSyncPreference,cacheAssets,assetsReady,downloadFiles,
     activate,deactivate,shouldQueue,isActive:()=>offlineActive,
     version:PACK_VERSION,cacheName:CACHE
   };

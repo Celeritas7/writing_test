@@ -9,6 +9,15 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). Before going offline, open the installed app online and use **Settings → Download study offline**. A first visit or install alone does **not** make the Library available offline.
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 7: verified offline result synchronization
+
+While connected and signed in to General_apps, open **Settings → Sync pending Hub / Quick results**. The app verifies your live Supabase identity and allowlist, reads any existing attempt UUIDs, inserts only missing Hub/Quick records and checks every result from the server before atomically removing its queued local session. It retains conflicts and interrupted sessions for retry/export. A local receipt is recorded after every verified session; **Export sync receipts** downloads a metadata-only audit trail.
+
+**Auto-sync after reconnecting** is optional and **off by default**. When enabled, it runs only for the current verified account while you are not actively inside Ghost Test or Quick Practice. Manual **Export pending results** remains available as a private backup.
+
+**Japanese writing results remain local.** The Technical Japanese project's anonymous review permissions and cross-project identity still need a secure, transactional, idempotent replay contract. The app deliberately does not upload or delete those pending Japanese sessions. No production Supabase schema or policies are changed in this phase.
+
+Phase 7 introduces a new app-shell/cache version. After updating online, select **Download study offline** again so the installed iPad app has the new sync module. Old offline caches and drafts are not cleared. See the [Phase 7 acceptance guide](docs/phase7-safe-offline-sync.md) for Wi-Fi-loss, conflict and real-device checks.
 ## Phase 6: reliable offline startup and study packs on iPad
 
 In the **installed Home Screen app** (or Safari tab you will actually reopen offline), sign in while connected, then open **Settings → Study offline on iPad → Download study offline**. The download checks all current app scripts and assets, shows a file/MB progress indicator, resumes after interruption and stores a previously verified, versioned Library snapshot. Only a complete pack is labeled **Ready offline**. Reopen that same app in airplane mode to study.
@@ -88,6 +97,7 @@ js/learning_hub.js         auth, data, Home / Library / Build / Review / Setting
 js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/quick_practice.js     timed self-rating, draft recovery, safe attempt syncing
 js/offline_store.js      existing IndexedDB pack schema, offline asset download and pending queue
+js/offline_sync.js       authenticated, insert-only pending result replay and receipt verification
 js/multilingual_core.js   portable vocabulary import format and evidence contract
 js/multilingual_packs.js  local per-account packs, handwriting mode picker, export
 js/learning_analytics.js  data-only calculations: dates, methods, repeated mistakes
