@@ -150,7 +150,7 @@
             jobId:id,kind:job.kind,owner,ids:actual,
             confirmedAt:proof.confirmedAt
           };
-          meta.put({id:recKey,receipts:[...prior.filter(x=>x.jobId!==id),receipt].slice(-250)});
+          meta.put({id:recKey,receipts:[...prior.filter(x=>x.jobId!==id),receipt]});
           store.delete(id);
         };
       };
