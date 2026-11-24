@@ -111,7 +111,7 @@ test('first upload is insert-only, read back and atomically acknowledged',async(
   assert.ok(r.state.read>=2);
   assert.equal(r.cache.size,1);assert.equal(r.pending.size,0);
   assert.equal(r.receipts.length,1);assert.equal(r.receipts[0].proof.ids[0],ID1);
-  assert.equal(r.env.ATTEMPTS[0].pending_local,undefined);
+  assert.equal(r.cache.get(ID1).pending_local,undefined);
 });
 test('previously committed result is verified, not overwritten on retry',async()=>{
   const r=rig({existing:[row()]});
