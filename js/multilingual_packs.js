@@ -48,7 +48,7 @@
   }
   function html(){
     if(!expanded)return '';
-    const entries=packs.map(p=>{
+    const entries=packs.filter(p=>p&&safe(p.pack_key)&&Array.isArray(p.items)).map(p=>{
       const count=sessions.filter(x=>x.pack_key===p.pack_key).length;
       const buttons=core.modes(p).map(mode=>'<button class="btn sm ghost" type="button" onclick="ghOpenLanguagePack(\''+
         p.pack_key+'\',\''+mode+'\')">'+escaping(core.MODES[mode])+'</button>').join('');
