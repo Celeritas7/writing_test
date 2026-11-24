@@ -768,71 +768,96 @@ async function pdfFont(){
 }
 async function makePdf(q, fname, batchId){
   const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({unit:'pt', format:'letter'}); // 612 x 792
-  const M=54, W=612-2*M, LH=15, TOP=112, BOTTOM=740, GRID_MIN=160, GRID_END=668;
+  const format=buildSel.paper==='letter'?'letter':'a4';
+  const doc=new jsPDF({unit:'pt',format});
+  const PAGE_W=doc.internal.pageSize.getWidth(), PAGE_H=doc.internal.pageSize.getHeight();
+  const M=48, W=PAGE_W-2*M, LH=16, GRID_END=PAGE_H-140, MIN_GRID=145;
   const text=q.map(x=>[x.p.subtitle,x.p.prompt,x.p.given_data,(TOPICS.find(z=>z.id===x.p.topic_id)||{}).name].join(' ')).join(' ');
-  let F='helvetica', FM='courier';
-  if(/[^\u0000-ÿ]/.test(text)){
-    try{ doc.addFileToVFS('NotoSansJP.ttf', await pdfFont()); doc.addFont('NotoSansJP.ttf','NotoSansJP','normal'); doc.addFont('NotoSansJP.ttf','NotoSansJP','bold'); F=FM='NotoSansJP'; }
-    catch(e){ toast('Japanese font could not be loaded — non-Latin text may not print.', 6000); }
+  let F='helvetica',FM='courier';
+  if(/[^\u0000-\u00ff]/.test(text)){
+    // Do not silently produce unreadable Japanese/math PDFs when the font fetch fails.
+    try{
+      doc.addFileToVFS('NotoSansJP.ttf',await pdfFont());
+      doc.addFont('NotoSansJP.ttf','NotoSansJP','normal');
+      doc.addFont('NotoSansJP.ttf','NotoSansJP','bold');
+      F=FM='NotoSansJP';
+    }catch(e){ throw new Error('Unicode PDF font unavailable. Reconnect and retry; no worksheet exported. '+(e.message||e)); }
   }
-  const footer=(i,p,cont)=>{
-    doc.setFontSize(7.5); doc.setTextColor(150); doc.setFont('courier','normal');
-    doc.text(`batch:${batchId}  problem:${p.id}`, M, 764);
-    doc.text(`${i+1} / ${q.length}${cont?' (cont.)':''}`, 612-M, 764, {align:'right'});
+  const fit=(t,width)=>{
+    let out=String(t||'');
+    while(out.length>1&&doc.getTextWidth(out)>width)out=out.slice(0,-1);
+    return out===String(t||'')?out:out.replace(/.{0,3}$/,'')+'...';
   };
-  const header=(i,p,t,cont)=>{
-    doc.setFont('helvetica','bold'); doc.setFontSize(30); doc.setTextColor(35,105,78);
-    doc.text(String(i+1).padStart(2,'0'), M, 78);
-    doc.setFontSize(10); doc.setTextColor(120); doc.setFont(FM,'normal');
-    const kick=((t.name||p.topic_id)+'  ·  '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')+(cont?'  ·  continued':'')).toUpperCase();
-    doc.text(kick, M+50, 70);
-    const kw=doc.getTextWidth(kick);
-    doc.setFont(F,'bold'); doc.setFontSize(14); doc.setTextColor(28,35,32);
-    let sub=p.subtitle||'', avail=W-50-kw-16;
-    if(doc.getTextWidth(sub)>avail){ doc.setFontSize(11); }
-    if(doc.getTextWidth(sub)>avail){ while(sub.length>1&&doc.getTextWidth(sub+'…')>avail) sub=sub.slice(0,-1); sub+='…'; }
-    doc.text(sub, 612-M, 74, {align:'right'});
-    doc.setDrawColor(28,35,32); doc.setLineWidth(1.4); doc.line(M, 88, 612-M, 88);
-    footer(i,p,cont);
-    return TOP;
+  const footer=(i,p,continued)=>{
+    doc.setFont('courier','normal');doc.setFontSize(7.2);doc.setTextColor(125);
+    doc.text('batch:'+batchId, M, PAGE_H-34);
+    doc.text('problem:'+String(p.id),M,PAGE_H-22);
+    doc.text((i+1)+' / '+q.length+(continued?' (cont.)':''),PAGE_W-M,PAGE_H-24,{align:'right'});
+  };
+  const header=(i,p,t,continued)=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(27);doc.setTextColor(35,105,78);
+    doc.text(String(i+1).padStart(2,'0'),M,73);
+    doc.setFont(FM,'normal');doc.setFontSize(10);doc.setTextColor(92);
+    const kick=((t.name||p.topic_id||'Practice')+' · '+(TIER_LABEL[p.tier]||'core')+' / '+(p.kind||'drill')+
+      (continued?' · continued':'')).toUpperCase();
+    doc.text(fit(kick,W-64),M+56,70);
+    doc.setFont(F,'bold');doc.setFontSize(12);doc.setTextColor(28,35,32);
+    const titleLines=doc.splitTextToSize(p.subtitle||'Practice',W);
+    const shortTitle=titleLines.slice(0,2);
+    if(titleLines.length>2)shortTitle[1]=fit(shortTitle[1]+'...',W);
+    doc.text(shortTitle,M,97);
+    const lineY=108+shortTitle.length*14;
+    doc.setDrawColor(28,35,32);doc.setLineWidth(1);
+    doc.line(M,lineY,PAGE_W-M,lineY);
+    footer(i,p,continued);
+    return lineY+18;
+  };
+  const newPage=(i,p,t)=>{
+    doc.addPage();
+    return header(i,p,t,true);
   };
   q.forEach((x,i)=>{
-    if(i) doc.addPage();
-    const p=x.p, t=TOPICS.find(z=>z.id===p.topic_id)||{};
-    let y=header(i,p,t,false), cont=false;
-    // prompt — flows onto continuation pages when it is long
-    doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32);
-    let lines=doc.splitTextToSize(p.prompt||'', W);
+    if(i)doc.addPage();
+    const p=x.p,t=TOPICS.find(z=>z.id===p.topic_id)||{};
+    let y=header(i,p,t,false);
+    doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);
+    const lines=doc.splitTextToSize(p.prompt||'',W);
     while(lines.length){
-      const n=Math.max(1, Math.floor((BOTTOM-y)/LH));
-      const chunk=lines.slice(0,n); lines=lines.slice(n);
-      doc.text(chunk, M, y); y+=chunk.length*LH;
-      if(lines.length){ doc.addPage(); cont=true; y=header(i,p,t,true); doc.setFont(F,'normal'); doc.setFontSize(12.5); doc.setTextColor(28,35,32); }
+      const space=Math.floor((GRID_END-MIN_GRID-y-12)/LH);
+      if(space<1){y=newPage(i,p,t);doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);continue;}
+      const chunk=lines.splice(0,space);
+      doc.text(chunk,M,y);
+      y+=chunk.length*LH;
+      if(lines.length){y=newPage(i,p,t);doc.setFont(F,'normal');doc.setFontSize(12);doc.setTextColor(28,35,32);}
     }
-    y+=10;
-    // given box — wrap width measured in the font it is drawn with
+    y+=12;
     if(p.given_data){
-      doc.setFont(FM,'normal'); doc.setFontSize(10);
-      const gl=doc.splitTextToSize('GIVEN   '+p.given_data, W-24);
-      const bh=gl.length*13+20;
-      if(y+bh>BOTTOM){ doc.addPage(); cont=true; y=header(i,p,t,true); }
-      doc.setFillColor(247,251,253); doc.setDrawColor(224,220,208); doc.setLineWidth(.8);
-      doc.roundedRect(M, y, W, bh, 3, 3, 'FD');
-      doc.setFont(FM,'normal'); doc.setFontSize(10); doc.setTextColor(35,105,78);
-      doc.text(gl, M+12, y+16); y+=bh+16;
+      doc.setFont(FM,'normal');doc.setFontSize(10);
+      const given=doc.splitTextToSize('GIVEN  '+String(p.given_data),W-24);
+      while(given.length){
+        const space=Math.floor((GRID_END-MIN_GRID-y-36)/14);
+        if(space<1){y=newPage(i,p,t);doc.setFont(FM,'normal');doc.setFontSize(10);continue;}
+        const chunk=given.splice(0,space),height=chunk.length*14+20;
+        doc.setFillColor(247,251,253);doc.setDrawColor(224,220,208);doc.setLineWidth(.8);
+        doc.roundedRect(M,y,W,height,3,3,'FD');
+        doc.setFont(FM,'normal');doc.setFontSize(10);doc.setTextColor(35,105,78);
+        doc.text(chunk,M+12,y+17);
+        y+=height+12;
+        if(given.length){y=newPage(i,p,t);doc.setFont(FM,'normal');doc.setFontSize(10);}
+      }
     }
-    // the work area always gets a full-height page if the text has eaten it
-    if(y>GRID_END-GRID_MIN){ doc.addPage(); cont=true; y=header(i,p,t,true); }
-    doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(150);
-    doc.text('WORK AREA — SHOW EVERY STEP', M, y+10);
-    doc.setDrawColor(222,232,238); doc.setLineWidth(.5);
-    for(let gy=y+24; gy<GRID_END; gy+=22) doc.line(M, gy, 612-M, gy);
-    // answer
-    doc.setFontSize(8); doc.setTextColor(120); doc.text('ANSWER', M, 690);
-    doc.setDrawColor(70,82,75); doc.setLineWidth(.8);
-    doc.line(M, 712, 612-M, 712); doc.line(M, 736, 612-M, 736);
+    if(y+MIN_GRID>GRID_END)y=newPage(i,p,t);
+    doc.setFont('courier','normal');doc.setFontSize(8);doc.setTextColor(140);
+    doc.text('WORK AREA - SHOW EVERY STEP',M,y+10);
+    doc.setDrawColor(222,232,238);doc.setLineWidth(.5);
+    for(let gy=y+26;gy<GRID_END;gy+=22)doc.line(M,gy,PAGE_W-M,gy);
+    doc.setFontSize(8);doc.setTextColor(120);
+    doc.text('ANSWER',M,PAGE_H-112);
+    doc.setDrawColor(70,82,75);doc.setLineWidth(.8);
+    doc.line(M,PAGE_H-90,PAGE_W-M,PAGE_H-90);
+    doc.line(M,PAGE_H-66,PAGE_W-M,PAGE_H-66);
   });
+  doc.setProperties({title:fname,subject:'Learning Hub worksheet '+batchId});
   return doc.output('blob');
 }
 
