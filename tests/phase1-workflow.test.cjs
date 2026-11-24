@@ -98,6 +98,16 @@ test('folder exporter writes private key and safe manifest before publishing PDF
   assert.ok(spot.indexOf('writeText(gr, jname, key)')<spot.indexOf('getFileHandle(fname,{create:true})'));
   assert.ok(spot.indexOf('writeText(out, jname, manifest)')<spot.indexOf('getFileHandle(fname,{create:true})'));
 });
+test('batch record must exist before publishing student files',()=>{
+  const excerpt=section('async function exportBatchNow(', 'function download(');
+  assert.ok(excerpt.indexOf("sb.from('written_test_batches').insert")>=0);
+  assert.ok(excerpt.indexOf("sb.from('written_test_batches').insert")<excerpt.indexOf('if(DIR){'));
+  assert.match(excerpt,/Batch tracking failed; no student files exported/);
+});
+test('already linked users can refresh grader instructions',()=>{
+  assert.match(hub,/window\.refreshGraderTask=async/);
+  assert.match(hub,/writeText\(DIR,'COWORK_TASK\.md',coworkTask\(\)\)/);
+});
 test('updated JavaScript parses',()=>{
   assert.doesNotThrow(()=>new Function(hub));
   assert.doesNotThrow(()=>new Function(helper));
