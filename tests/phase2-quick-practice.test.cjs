@@ -117,7 +117,8 @@ test('old routes and Ghost Test remain accessible, Quick reachable on iPad',()=>
   assert.match(css,/\.nav-item\.qp-nav\{display:none!important\}/);
 });
 test('save paths include account-scoped draft, pending backup and visible-time pause',()=>{
-  assert.match(source,/DRAFT_PREFIX\+owner\(\)/);
+  assert.match(source,/const key=\(\)=>draftKey\(owner\(\)\)/);
+  assert.match(source,/draftKey\(Q\.session\.owner\)/);
   assert.match(source,/Q\.persistChain/);
   assert.match(source,/phase='pending'/);
   assert.match(source,/onConflict:'id'/);
