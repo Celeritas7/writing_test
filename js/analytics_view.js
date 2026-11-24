@@ -57,7 +57,7 @@
       ' incorrect marks in the last 90 days</div>'+
       (x.notes?'<p class="an-note"><b>Latest Cowork feedback:</b> '+e(x.notes.slice(0,300))+'</p>':'')+
       '<div class="an-actions"><button class="btn sm ghost an-topic-practice" data-topic="'+e(x.topicId)+
-      '" type="button">Quick Practice topic</button><button class="btn sm ghost an-topic-build" data-topic="'+
+      '" data-mode="'+(x.state==='due'?'due':'weak')+'" type="button">Quick Practice topic</button><button class="btn sm ghost an-topic-build" data-topic="'+
       e(x.topicId)+'" type="button">Build worksheet</button></div></article>').join('');
   }
   function topics(data){
@@ -67,6 +67,7 @@
       return '<article class="an-topic-row"><div class="an-topic-head"><div><strong>'+e(t.name)+
         '</strong><div class="an-muted">'+e(t.subjectName)+'</div></div>'+
         '<button class="btn sm ghost an-topic-practice" data-topic="'+e(t.id)+
+        '" data-mode="'+(t.weak?'weak':t.due?'due':t.new?'new':'random')+
         '" type="button">Practise</button></div>'+
         '<div class="an-topic-meta">'+t.reviewed+'/'+t.total+' questions ever attempted · '+
         t.attempts+' attempts in period · '+t.weak+' weak · '+t.due+' due</div>'+
@@ -121,7 +122,7 @@
       STATE.days=Number(b.dataset.days);renderAnalytics();
     }));
     document.querySelectorAll('.an-topic-practice').forEach(b=>b.addEventListener('click',()=>{
-      if(typeof window.quickPracticeFor==='function')window.quickPracticeFor(b.dataset.topic,'weak');
+      if(typeof window.quickPracticeFor==='function')window.quickPracticeFor(b.dataset.topic,b.dataset.mode||'due');
       else practise(b.dataset.topic);
     }));
     document.querySelectorAll('.an-topic-build').forEach(b=>b.addEventListener('click',()=>{
