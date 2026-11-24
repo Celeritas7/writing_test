@@ -635,7 +635,7 @@ function renderHome(){
   const latest=latestByProblem();
   let weak=0, due=0; for(const p of PROBLEMS){ const c=pstatus(p,latest).code; if(c==='weak') weak++; else if(c==='due') due++; }
   const jp=(typeof JPS!=='undefined')?JPS:{};
-  const jpReadyNow=!DEMO&&typeof jpReady==='function'&&jpReady();
+  const jpReadyNow=!DEMO&&!OFFLINE_MODE&&typeof jpReady==='function'&&jpReady();
   if(jpReadyNow&&!HOME_JP&&typeof jpDueCount==='function'){ HOME_JP=true; jpDueCount().then(()=>{ if(location.hash==='#home'||(!location.hash&&matchMedia('(max-width:760px)').matches)) renderHome(); }); }
   const jpDue=jp.dueCount==null?null:jp.dueCount;
   // accuracy over the last 7 days: Cowork + ghost attempts, plus Japanese sheets from the local log
