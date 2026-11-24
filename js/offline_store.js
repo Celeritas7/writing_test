@@ -57,12 +57,22 @@
   const verifiedUser=()=>op('meta','get','last-verified-user');
   const pack=id=>op('packs','get',id);
   const japanese=id=>op('japanese','get',id);
+  async function offlineOwner(){
+    const proof=await verifiedUser(),local=storedUser();
+    if(!proof||!proof.offlineAllowed||!proof.userId)return null;
+    // A different signed-in user must never inherit the previous owner's pack.
+    if(local&&local.id!==proof.userId)return null;
+    return proof.userId;
+  }
   async function enrolled(owner){
-    const local=storedUser(),proof=await verifiedUser(),p=owner&&await pack(owner);
-    return !!(local&&local.id===owner&&proof&&proof.userId===owner&&
-      p&&p.id===owner&&p.version===PACK_VERSION&&p.verified&&
-      Array.isArray(p.problems)&&Array.isArray(p.topics)&&
+    const available=await offlineOwner(),p=owner&&await pack(owner);
+    return !!(available===owner&&p&&p.id===owner&&p.version===PACK_VERSION&&
+      p.verified&&Array.isArray(p.problems)&&Array.isArray(p.topics)&&
       Array.isArray(p.subjects)&&Array.isArray(p.attempts));
+  }
+  async function lockOffline(){
+    const proof=await verifiedUser();
+    if(proof)await op('meta','put',{...proof,offlineAllowed:false});
   }
   async function savePack(p){
     if(!p||!p.id||p.version!==PACK_VERSION||!p.verified||
@@ -75,7 +85,8 @@
     // never change which previously verified pack can be opened.
     await op('packs','put',p);
     await op('meta','put',{id:'last-verified-user',userId:p.id,
-      email:p.email||user.email,role:p.role,savedAt:p.savedAt});
+      email:p.email||user.email,role:p.role,savedAt:p.savedAt,
+      offlineAllowed:true});
   }
   async function saveJapanese(owner,sheet){
     if(!owner||!sheet||!sheet.items||!Array.isArray(sheet.items)||!sheet.items.length)
@@ -158,7 +169,8 @@
   function shouldQueue(){return offlineActive||navigator.onLine===false;}
   const downloadFiles=()=>FILES.slice();
   window.WTOffline={
-    storedUser,verifiedUser,pack,japanese,enrolled,savePack,saveJapanese,
+    storedUser,verifiedUser,offlineOwner,enrolled,lockOffline,
+    pack,japanese,savePack,saveJapanese,
     pending,queue,queuedAttempts,cacheAssets,assetsReady,downloadFiles,
     activate,deactivate,shouldQueue,isActive:()=>offlineActive,
     version:PACK_VERSION,cacheName:CACHE
