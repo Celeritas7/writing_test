@@ -130,6 +130,55 @@ test('refresh is read-only and prevents incomplete replacement',()=>{
   assert.match(view,/Account changed during refresh/);
   assert.doesNotMatch(view,/\.insert\(|\.update\(|\.upsert\(|\.delete\(/);
 });
+test('analytics UI renders safely with a note containing HTML',()=>{
+  const main={innerHTML:''};
+  const fakeEl=()=>({addEventListener(){}});
+  const notes=attempts.map((a,i)=>i===0?{...a,notes:'<img src=x onerror=bad()>'}:a);
+  const FixedDate=class extends Date{
+    constructor(...args){super(...(args.length?args:['2026-11-24T18:00:00Z']));}
+    static now(){return new Date('2026-11-24T18:00:00Z').getTime();}
+  };
+  const ui={
+    window:{},document:{getElementById:id=>id==='main'?main:fakeEl(),
+      querySelectorAll:()=>[]},
+    location:{hash:'#analytics'},Date:FixedDate,
+    WTAnalytics:env.window.WTAnalytics,
+    PROBLEMS:problems,TOPICS:topics,SUBJECTS:subjects,ATTEMPTS:notes,
+    SESSION:{user:{id:'owner'}},DEMO:false,
+    esc:str=>String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
+    pstatus:statusOf
+  };
+  vm.runInNewContext(view,ui);
+  ui.window.renderAnalytics();
+  assert.match(main.innerHTML,/Your learning trends/);
+  assert.match(main.innerHTML,/Focus next/);
+  assert.match(main.innerHTML,/an-plot/);
+  assert.match(main.innerHTML,/&lt;img src=x/);
+  assert.doesNotMatch(main.innerHTML,/<img src=x/);
+});
+test('failed page refresh leaves previously loaded attempts in place',async()=>{
+  const main={innerHTML:''};
+  const baseline=attempts.slice();
+  const ui={
+    window:{},document:{getElementById:id=>id==='main'?main:{addEventListener(){}},
+      querySelectorAll:()=>[]},
+    location:{hash:'#analytics'},WTAnalytics:env.window.WTAnalytics,
+    PROBLEMS:problems,TOPICS:topics,SUBJECTS:subjects,ATTEMPTS:baseline,
+    SESSION:{user:{id:'owner'}},DEMO:false,
+    esc:str=>String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;'),
+    pstatus:statusOf,
+    sb:{from:()=>({select:()=>({order:()=>({range:async()=>({
+      data:null,error:new Error('Network unavailable')
+    })})})})}
+  };
+  vm.runInNewContext(view,ui);
+  await ui.window.refreshAnalytics();
+  assert.equal(ui.ATTEMPTS,baseline);
+  assert.match(main.innerHTML,/Refresh incomplete/);
+  assert.match(main.innerHTML,/Network unavailable/);
+});
 test('analysis and presentation files parse',()=>{
   assert.doesNotThrow(()=>new Function(core));
   assert.doesNotThrow(()=>new Function(view));
