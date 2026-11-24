@@ -146,7 +146,8 @@
       const pageSize=500,limit=10000;
       for(let offset=0;offset<limit;offset+=pageSize){
         const {data,error}=await sb.from('written_test_attempts')
-          .select('*').order('graded_at',{ascending:false}).range(offset,offset+pageSize-1);
+          .select('*').order('graded_at',{ascending:false}).order('id',{ascending:false})
+          .range(offset,offset+pageSize-1);
         if(error)throw error;
         const page=data||[];
         rows.push(...page);
@@ -154,12 +155,18 @@
       }
       if(rows.length===limit){
         const {data,error}=await sb.from('written_test_attempts').select('id')
-          .order('graded_at',{ascending:false}).range(limit,limit);
+          .order('graded_at',{ascending:false}).order('id',{ascending:false}).range(limit,limit);
         if(error)throw error;
         if(data&&data.length)throw new Error('More than 10,000 attempts; cannot claim complete history. Existing results preserved.');
       }
       if(!SESSION||SESSION.user.id!==currentOwner)throw new Error('Account changed during refresh');
-      ATTEMPTS=rows;STATE.complete=true;STATE.refreshedAt=Date.now();
+      const seen=new Set();
+      ATTEMPTS=rows.filter(a=>{
+        if(!a||!a.id)return !!a;
+        if(seen.has(a.id))return false;
+        seen.add(a.id);return true;
+      });
+      STATE.complete=true;STATE.refreshedAt=Date.now();
     }catch(err){STATE.error='Refresh incomplete. Previously loaded results were kept. '+(err.message||err);}
     finally{STATE.busy=false;if(active())window.renderAnalytics();}
   }
