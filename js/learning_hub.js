@@ -10,6 +10,7 @@ const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
+let OFFLINE_MODE=false, OFFLINE_DOWNLOAD_BUSY=false;
 let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 /* an id that is never empty (Japanese or symbol-only names) and never collides with an existing row */
@@ -122,7 +123,24 @@ window.installApp=async()=>{
 };
 /* who is signed in, for the sidebar foot and the Account card */
 const whoText=()=>DEMO?'demo mode — nothing is saved':((SESSION.user.email||SESSION.user.id)+(ROLE?' · '+ROLE:''));
-window.signOut=async()=>{ if(!DEMO) await sb.auth.signOut(); location.href=location.pathname; };
+window.signOut=async()=>{
+  if(!DEMO&&window.WTOffline){
+    try{await WTOffline.lockOffline();}catch(e){
+      toast('Offline access could not be locked; do not leave this device shared. '+e.message,7000);
+      return;
+    }
+  }
+  if(OFFLINE_MODE){
+    WTOffline.deactivate();OFFLINE_MODE=false;LOADED=false;
+    SESSION=null;ROLE=null;document.body.classList.remove('study-offline');
+    $('app').classList.add('hide');$('gate').classList.remove('hide');
+    $('offline-launch').classList.add('hide');
+    $('gate-msg').textContent='Offline access locked. Reconnect to sign in again; downloaded data was not deleted.';
+    return;
+  }
+  if(!DEMO)await sb.auth.signOut();
+  location.href=location.pathname;
+};
 $('demo-btn').addEventListener('click', ()=>{ DEMO=true; startDemo(); });
 
 /* returns the allowlist row, null if not listed, or {error} if unreadable */
@@ -134,30 +152,98 @@ async function authRole(email){
   return (data&&data[0])||null;
 }
 let ADMITTING=false;
+function isOfflineNetworkError(message){
+  return /failed to fetch|network|timeout|timed out|abort|internet|connection|offline/i.test(String(message||''));
+}
+async function offlineEntry(manual=false){
+  if(DEMO||!window.WTOffline)return false;
+  if(LOADED&&!OFFLINE_MODE)return false;
+  try{
+    const owner=await WTOffline.offlineOwner();
+    if(!owner||!await WTOffline.enrolled(owner)||!await WTOffline.assetsReady()){
+      if(manual)$('gate-msg').textContent=
+        'No complete offline pack is available here. Sign in online, open Settings and download from this installed app.';
+      return false;
+    }
+    const p=await WTOffline.pack(owner);
+    if(SESSION&&SESSION.user&&SESSION.user.id!==owner)return false;
+    OFFLINE_MODE=true;WTOffline.activate();
+    SESSION={user:{id:owner,email:p.email||''}};
+    ROLE=p.role||'learner';
+    SUBJECTS=p.subjects.slice();TOPICS=p.topics.slice();PROBLEMS=p.problems.slice();
+    ATTEMPTS=p.attempts.slice();BATCHES=(p.batches||[]).slice();
+    const queued=await WTOffline.queuedAttempts(owner);
+    const ids=new Set(queued.map(r=>r.id));
+    ATTEMPTS=[...queued,...ATTEMPTS.filter(a=>!ids.has(a.id))];
+    LOADED=true;
+    $('gate').classList.add('hide');$('app').classList.remove('hide');
+    $('who').textContent=(p.email||'Learner')+' · offline pack';
+    document.body.classList.add('study-offline');
+    route();
+    return true;
+  }catch(e){
+    if(manual)$('gate-msg').textContent='Offline pack could not open: '+(e.message||e);
+    return false;
+  }
+}
+window.openOfflineStudy=()=>offlineEntry(true);
+$('offline-launch').addEventListener('click',()=>offlineEntry(true));
+async function showOfflineGate(){
+  if(!window.WTOffline||LOADED)return;
+  try{
+    const owner=await WTOffline.offlineOwner();
+    const ready=!!(owner&&await WTOffline.enrolled(owner)&&await WTOffline.assetsReady());
+    $('offline-launch').classList.toggle('hide',!ready);
+  }catch(e){}
+}
 async function admit(s){
-  if(!s||SESSION||DEMO||ADMITTING) return;
-  ADMITTING=true; try{ await admitInner(s); } finally{ ADMITTING=false; }
+  if(!s||SESSION||DEMO||ADMITTING||OFFLINE_MODE)return;
+  ADMITTING=true;
+  try{await admitInner(s);}
+  catch(e){
+    if((!navigator.onLine||isOfflineNetworkError(e.message))&&await offlineEntry())return;
+    $('gate-msg').textContent='Could not sign in: '+(e.message||e);
+  }finally{ADMITTING=false;}
 }
 async function admitInner(s){
-  // boot() is awaited here so a network throw ends in loadError rather than an unhandled rejection
   const email=(s.user&&s.user.email||'').trim();
   const row=await authRole(email);
+  if(OFFLINE_MODE)return;
   if(row&&row.error){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent='Could not read the access list ('+row.error+'). Run sql/'+(/recursion/i.test(row.error)?'auth_allowlist_fix.sql':'auth_allowlist.sql')+'.';
-    await sb.auth.signOut(); return;
+    if((!navigator.onLine||isOfflineNetworkError(row.error))&&await offlineEntry())return;
+    const m=$('gate-msg');m.className='msg err';
+    m.textContent='Could not verify your access ('+row.error+
+      '). Try again online or use a previously downloaded offline pack.';
+    await showOfflineGate(); // a transient network error must not sign out the learner
+    return;
   }
   if(!row){
-    const m=$('gate-msg'); m.className='msg err';
-    m.textContent=email+' is not on the access list. Ask Aniket to add you.';
-    await sb.auth.signOut(); return;
+    const m=$('gate-msg');m.className='msg err';
+    m.textContent=email+' is not on the access list. Ask the administrator to add you.';
+    if(window.WTOffline)await WTOffline.lockOffline().catch(()=>{});
+    await sb.auth.signOut();return;
   }
-  ROLE=row.role||'operator';
-  SESSION=s;
-  try{ await boot(); }catch(e){ loadError(e.message||String(e)); }
+  ROLE=row.role||'operator';SESSION=s;
+  try{await boot();}
+  catch(e){
+    if((!navigator.onLine||isOfflineNetworkError(e.message))&&await offlineEntry())return;
+    loadError(e.message||String(e));
+  }
 }
-sb.auth.onAuthStateChange((_e,s)=>{ admit(s); });
-sb.auth.getSession().then(({data})=>{ admit(data.session); });
+sb.auth.onAuthStateChange((_event,s)=>{if(!OFFLINE_MODE)admit(s);});
+if(navigator.onLine===false){
+  // Avoid starting a Supabase token refresh when the app is known to be offline.
+  offlineEntry().then(ok=>{if(!ok)showOfflineGate();});
+}else{
+  sb.auth.getSession().then(({data})=>{
+    if(data&&data.session)admit(data.session);
+    else showOfflineGate();
+  }).catch(()=>offlineEntry().then(ok=>{if(!ok)showOfflineGate();}));
+  // Wi-Fi can be connected while the Internet is unavailable. A downloaded
+  // pack offers a bounded fallback rather than leaving the learner at Login.
+  setTimeout(()=>{if(!LOADED)offlineEntry();},6500);
+}
+showOfflineGate();
 
 /* ---------- data ---------- */
 function loadError(msg){
@@ -179,11 +265,23 @@ async function boot(){
       sb.from('written_test_subjects').select('*').order('sort_no')
     ]);
     const bad=[t,p,a].find(r=>r.error);
-    if(bad){ loadError(bad.error.message); return; }
+    if(bad){
+      if((!navigator.onLine||isOfflineNetworkError(bad.error.message))&&await offlineEntry())return;
+      loadError(bad.error.message);return;
+    }
     TOPICS=t.data||[]; PROBLEMS=p.data||[]; ATTEMPTS=a.data||[];
     BATCHES=b.error?[]:(b.data||[]); // tables may not exist until schema.sql is run
     SUBJECTS=s.error?[{id:'maths',sort_no:1,name:'Maths'}]:(s.data||[]);
     if(b.error||s.error) toast('Run schema.sql to enable subjects & batch tracking.', 5000);
+    // Preserve unsynced Hub/Quick marks across reloads. They are explicitly
+    // tagged local-pending and not claimed to be already on the server.
+    if(window.WTOffline){
+      try{
+        const waiting=await WTOffline.queuedAttempts(SESSION.user.id);
+        const ids=new Set(waiting.map(r=>r.id));
+        ATTEMPTS=[...waiting,...ATTEMPTS.filter(a=>!ids.has(a.id))];
+      }catch(e){toast('Could not read offline pending results: '+e.message,6000);}
+    }
   }
   LOADED=true;
   await restoreDir();
