@@ -483,7 +483,7 @@ function renderBuild(){
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
       <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
-    </div><div id="exp-msg" class="msg"></div>${GRADER_KEY_PENDING?`<div style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
+    </div><div id="exp-msg" class="msg"></div>${GRADER_KEY_PENDING?`<div id="grd-pending-action" style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
@@ -741,11 +741,13 @@ async function exportBatchNow(q, m){
   } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   m.className='msg ok';
   m.textContent=`${fname} → ${dest}. Solve the PDF on your iPad and save it into solved/.`;
+  const oldButton=$('grd-pending-action'); if(oldButton)oldButton.remove();
   if(GRADER_KEY_PENDING){
-    m.append(document.createTextNode(' Private answers were NOT downloaded with the student files.'),document.createElement('div'));
-    const b=document.createElement('button'); b.className='btn sm ghost'; b.style.marginTop='10px';
+    m.append(document.createTextNode(' Private answers were NOT included in student downloads.'));
+    const wrap=document.createElement('div'); wrap.id='grd-pending-action'; wrap.style.marginTop='10px';
+    const b=document.createElement('button'); b.className='btn sm ghost';
     b.textContent='Download PRIVATE grader answer key'; b.addEventListener('click',downloadGraderKey);
-    m.appendChild(b);
+    wrap.appendChild(b); m.insertAdjacentElement('afterend',wrap);
   }
 }
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
