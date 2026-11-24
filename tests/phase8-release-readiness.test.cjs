@@ -174,6 +174,21 @@ test('snapshot download checks live account and allowlist before saving',()=>{
   assert.match(hub,/const allowed=await authRole\(user\.data\.user\.email\)/);
   assert.match(hub,/Account or connection changed during download/);
 });
+test('old downloaded packs remain readable but never receive a false verified Ready label',()=>{
+  const start=hub.indexOf('function completeOfflinePack(p){');
+  const end=hub.indexOf('let SESSION=',start);
+  assert.ok(start>=0&&end>start);
+  const isComplete=new Function(hub.slice(start,end)+'\nreturn completeOfflinePack;')();
+  const pack={completeSnapshot:true,counts:{subjects:1,topics:0,problems:1,
+    attempts:0,batches:0},subjects:[{id:'s'}],topics:[],
+    problems:[{id:'p'}],attempts:[],batches:[]};
+  assert.equal(isComplete(pack),true);
+  assert.equal(isComplete({...pack,completeSnapshot:false}),false);
+  assert.equal(isComplete({...pack,problems:[]}),false);
+  assert.match(hub,/Older offline pack available · completeness not verified/);
+  assert.match(hub,/OFFLINE_LEGACY_PACK=!completeOfflinePack\(p\)/);
+  assert.match(hub,/ready&&complete\?'Ready offline/);
+});
 test('source modules parse without a build step',()=>{
   assert.doesNotThrow(()=>new Function(core));
   assert.doesNotThrow(()=>new Function(hub));
