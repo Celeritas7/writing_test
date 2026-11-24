@@ -639,7 +639,7 @@ function renderSetup(){
       <div class="steps">
         <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
         <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--amber)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'Not linked yet'}</span></div>
-          <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
+          <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Reference answers go to <span class="mono">grader/</span>, not <span class="mono">outbox/</span>. If you link a shared iCloud root, both folders are still accessible to its members; use a private grader folder for confidential keys.</div></div></div>
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
       </div>
@@ -680,7 +680,7 @@ async function writeText(dirHandle, name, text){
 }
 
 /* ---------- export ---------- */
-let EXPORTING=false;
+let EXPORTING=false, PRIVATE_GRADER_EXPORT=null;
 async function exportBatch(){
   if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
@@ -706,24 +706,55 @@ async function exportBatchNow(q, m){
   // outbox/ syncs to the iPad next to the sheet, so it never carries answers; grader/ holds the full key
   const manifest=JSON.stringify({...head, problems:q.map(prob)}, null, 2);
   const key=JSON.stringify({...head, problems:q.map(x=>({...prob(x), answer:x.p.answer||null, worked:x.p.worked||null}))}, null, 2);
+  PRIVATE_GRADER_EXPORT=null; // no implicit answer key in the student's Downloads
   let dest='downloaded', written=false;
   if(DIR){
     try{
-      const out=await DIR.getDirectoryHandle('outbox',{create:true});
-      const fh=await out.getFileHandle(fname,{create:true});
-      const w=await fh.createWritable(); await w.write(blob); await w.close();
-      await writeText(out, jname, manifest);
+      /* Prepare the grader's key in a separate directory before publishing the
+         student-facing files. A shared iCloud root is NOT an access boundary. */
       const gr=await DIR.getDirectoryHandle('grader',{create:true});
       await writeText(gr, jname, key);
-      dest='outbox/ (syncing to iPad)'; written=true;
+      const out=await DIR.getDirectoryHandle('outbox',{create:true});
+      await writeText(out, jname, manifest);
+      const fh=await out.getFileHandle(fname,{create:true});
+      const w=await fh.createWritable(); await w.write(blob); await w.close();
+      dest='outbox/ (grader key in grader/)'; written=true;
     }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
   }
-  if(!written){ download(blob, fname); download(new Blob([key],{type:'application/json'}), jname); dest='downloaded (PDF + manifest — the grader needs both)'; }
+  if(!written){
+    download(blob, fname);
+    download(new Blob([manifest],{type:'application/json'}), jname);
+    /* Explicit separate step, with a distinct filename so it cannot silently
+       replace the student manifest in the browser's Downloads folder. */
+    PRIVATE_GRADER_EXPORT={json:key,filename:fname.replace(/\.pdf$/,'-grader.json'),target:jname};
+    dest='downloaded (student PDF + answer-free manifest)';
+  }
   if(!DEMO){
     const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
     if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
-  m.className='msg ok'; m.textContent=`${fname} → ${dest}. Solve it on the iPad, save into solved/ — Cowork does the rest.`;
+  m.className='msg ok';
+  m.textContent=`${fname} → ${dest}. Solve it on the iPad, save into solved/. `+
+    (written?'Keep grader/ separate from anyone sharing the folder.':'The grader key was NOT downloaded automatically. ');
+  if(PRIVATE_GRADER_EXPORT){
+    const action=document.createElement('button');
+    action.type='button'; action.className='btn sm ghost';
+    action.textContent='Download private grader key separately';
+    action.style.marginLeft='10px';
+    action.addEventListener('click',downloadPrivateGraderKey);
+    m.appendChild(action);
+  }
+}
+async function downloadPrivateGraderKey(){
+  const p=PRIVATE_GRADER_EXPORT; if(!p) return toast('Export a worksheet first.');
+  const ok=await ask({
+    title:'Download a private answer key?',
+    body:'<p>This file contains the reference answers. Only download it on a trusted grader device. Do not put it in outbox/ or share it with learners.</p><p>The file ends in <b>-grader.json</b> so it cannot replace the student manifest. Before Cowork grades, move it into <b>grader/</b> and rename it to match the student manifest.</p>',
+    ok:'Download grader key', cancel:'Cancel'
+  });
+  if(!ok)return;
+  download(new Blob([p.json],{type:'application/json'}),p.filename);
+  toast('Private grader key downloaded. Move it to grader/ and rename it to '+p.target+'.',6500);
 }
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 
@@ -816,9 +847,16 @@ You are my study grader. This folder is the exchange point between my Learning H
 
 ## Folder layout
 - outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename, no answers — this folder syncs to the iPad)
-- grader/  — the full manifest for each batch, including reference answers. READ ANSWERS FROM HERE.
+- grader/  — the full manifest for each batch, including reference answers. READ ANSWERS FROM HERE. Keep this directory private; a shared iCloud parent does not make it secure.
 - solved/  — PDFs I solved by hand on the iPad (Markup annotations). NEW FILES HERE = YOUR TRIGGER.
 - graded/  — where you move PDFs after grading
+
+## If the browser downloaded the files instead of writing to the folder
+Move the student PDF and answer-free .json into outbox/. The private answer key
+is obtained using the separate "Download private grader key" button, named
+WT_<topic>_<date>-grader.json. Move that key into grader/ and rename it to the
+student manifest's basename (WT_<topic>_<date>.json) before requesting grading.
+Never place a grader key in outbox/ or a folder shared with learners.
 
 ## When a new PDF appears in solved/
 1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the matching manifest in grader/ (same basename as the original export) for prompts, given data and reference answers.
