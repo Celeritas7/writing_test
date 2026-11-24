@@ -1,13 +1,13 @@
 /* Learning Hub · Phase 6 iPad offline shell.
  * Never cache Supabase API data, tokens or user-owned answers in the worker.
  * Keep older cache namespaces, IndexedDB and study drafts untouched.
- * A completed user-requested download lives in wt-ipad-assets-phase6. */
-const VERSION='lh-v2-phase7';
-const OFFLINE_CACHE='wt-ipad-assets-phase7';
+ * A completed user-requested download uses a versioned cache namespace. */
+const VERSION='lh-v2-phase8';
+const OFFLINE_CACHE='wt-ipad-assets-phase8';
 const SHELL=[
   './','index.html','manifest.webmanifest','css/learning_hub.css',
   'js/multilingual_core.js','js/multilingual_packs.js',
-  'js/worksheet_handoff.js','js/learning_analytics.js','js/offline_store.js','js/offline_sync.js',
+  'js/worksheet_handoff.js','js/learning_analytics.js','js/offline_store.js','js/offline_sync.js','js/release_readiness.js',
   'js/learning_hub.js','js/analytics_view.js','js/quick_practice.js',
   'js/ghost_test.js','js/japanese_source.js',
   'icons/icon-192.png','icons/favicon-32.png','icons/apple-touch-icon.png'

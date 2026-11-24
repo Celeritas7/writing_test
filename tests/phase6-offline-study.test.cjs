@@ -90,7 +90,7 @@ function rig(){
   vm.runInNewContext(store,env);
   return {
     WT:env.window.WTOffline,records,maps,fetched,failOnce,navigator,
-    setSession:v=>{session=v;},cacheSize:()=>maps.get('wt-ipad-assets-phase7')?.size||0
+    setSession:v=>{session=v;},cacheSize:()=>maps.get('wt-ipad-assets-phase8')?.size||0
   };
 }
 test('Phase 6 asset manifest covers all new study screens and dependencies',()=>{
@@ -103,7 +103,7 @@ test('Phase 6 asset manifest covers all new study screens and dependencies',()=>
   }
   assert.equal(new Set(files).size,files.length);
   assert.match(index,/js\/offline_store\.js/);
-  assert.match(worker,/wt-ipad-assets-phase7/);
+  assert.match(worker,/wt-ipad-assets-phase8/);
 });
 test('broken downloads resume missing assets and never activate a partial pack',async()=>{
   const r=rig(),p='https://example.test/app/';

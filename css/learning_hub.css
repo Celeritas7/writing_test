@@ -666,3 +666,18 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
   .wt-sync-panel .btn{min-height:44px}
   .wt-sync-option{align-items:flex-start}
 }
+
+
+/* Phase 8 · read-only iPad release diagnostics */
+.wt-qa-card .acts{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.wt-qa-card .btn{min-height:44px}
+.wt-qa-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}
+.wt-qa-list li{display:flex;flex-direction:column;gap:4px;
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  overflow-wrap:anywhere}
+.wt-qa-list li strong{font-size:13px;font-weight:600;color:var(--ink)}
+.wt-qa-list li span{font-size:12px;line-height:1.5;color:var(--soft)}
+@media(max-width:560px){
+  .wt-qa-card{padding:15px}
+  .wt-qa-card .acts .btn{min-height:44px;white-space:normal}
+}

@@ -9,6 +9,13 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). Before going offline, open the installed app online and use **Settings → Download study offline**. A first visit or install alone does **not** make the Library available offline.
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 8: iPad acceptance and release verification
+
+**Release gate: NO-GO until actual iPad checks pass.** Settings → **Run iPad readiness checks** inspects the installed app's service worker, current downloaded assets, previously verified study pack, local pending/receipt counts, browser storage estimate and Home Screen context **without writing to Supabase or deleting data**. **Export safe diagnostic report** saves counts and status checks only, not account IDs, answers or handwriting.
+
+**Download study offline** now rechecks the live authenticated user and allowlist, reads all five relevant tables in 400-row pages and compares every result against exact server counts. Failed pages, duplicate IDs, insufficient data or unsupported very large datasets stop the download **without replacing an older saved pack**. Legacy downloaded packs remain readable where possible, but are explicitly labeled as **not count-verified** until refreshed. New offline assets use a versioned Phase 8 cache; the old caches and IndexedDB are preserved.
+
+Complete the [Phase 8 iPad acceptance matrix and GO/NO-GO checklist](docs/phase8-ipad-release-gate.md) before approving release. It includes offline Home Screen relaunch, Apple Pencil, Japanese local-only results, two consecutive Quick Practice sessions, reconnect/sync, VoiceOver and same-origin update preservation. These cannot be certified by automated source tests. The Technical Japanese aggregate-review synchronization limitation from Phase 7 remains unchanged.
 ## Phase 7: verified offline result synchronization
 
 While connected and signed in to General_apps, open **Settings → Sync pending Hub / Quick results**. The app verifies your live Supabase identity and allowlist, reads any existing attempt UUIDs, inserts only missing Hub/Quick records and checks every result from the server before atomically removing its queued local session. It retains conflicts and interrupted sessions for retry/export. A local receipt is recorded after every verified session; **Export sync receipts** downloads a metadata-only audit trail.
@@ -98,6 +105,7 @@ js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/quick_practice.js     timed self-rating, draft recovery, safe attempt syncing
 js/offline_store.js      existing IndexedDB pack schema, offline asset download and pending queue
 js/offline_sync.js       authenticated, insert-only pending result replay and receipt verification
+js/release_readiness.js  read-only iPad diagnostics and exact-count offline snapshot validation
 js/multilingual_core.js   portable vocabulary import format and evidence contract
 js/multilingual_packs.js  local per-account packs, handwriting mode picker, export
 js/learning_analytics.js  data-only calculations: dates, methods, repeated mistakes
