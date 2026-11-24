@@ -139,7 +139,8 @@
     const repeated=[...byProblem.entries()].filter(([,e])=>e.misses>=2).length;
     return {
       days,period:{start:labelDate(start),end:labelDate(today)},
-      subject,bankCount:bank.length,reviewedCount:bank.filter(p=>latest.has(p.id)).length,
+      subject,subjectName:subject==='all'?'All subjects':(subjectById.get(subject)?.name||subject),
+      bankCount:bank.length,reviewedCount:bank.filter(p=>latest.has(p.id)).length,
       attempts:recent.length,distinctRecent:new Set(recent.map(a=>a.problem_id)).size,
       statuses,methods,series,topics:topicList,focus,repeated,
       unknownSources:methods.other.n,generatedAt:date.toISOString()
@@ -150,7 +151,7 @@
     const lines=[
       'LEARNING HUB — STUDY REPORT','',
       'Period: '+a.period.start+' – '+a.period.end+' ('+a.days+' calendar days)',
-      'Selected subject: '+(a.subject==='all'?'All subjects':a.subject),
+      'Selected subject: '+(a.subjectName||a.subject),
       'Library questions: '+a.bankCount,
       'Questions ever attempted: '+a.reviewedCount,
       'Attempts in period: '+a.attempts+' ('+a.distinctRecent+' unique questions)',
