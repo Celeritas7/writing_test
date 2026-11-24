@@ -159,6 +159,21 @@ test('device diagnostic UI is read-only and can export a safe summary',()=>{
   assert.match(hub,/LAST_IPAD_DIAGNOSTIC/);
   assert.match(hub,/JSON.stringify\(report,null,2\)/);
 });
+test('all local scripts in index are included in both offline asset lists',()=>{
+  const localScripts=[...index.matchAll(/<script src="(js\/[^"]+)"/g)].map(m=>m[1]);
+  assert.ok(localScripts.length>=10,'expected all current study modules');
+  for(const file of localScripts){
+    assert.ok(offline.includes("'"+file+"'"),file+' missing from download manifest');
+    assert.ok(worker.includes("'"+file+"'"),file+' missing from worker shell');
+  }
+  assert.ok(index.indexOf('js/release_readiness.js')>
+    index.indexOf('js/offline_store.js'));
+});
+test('snapshot download checks live account and allowlist before saving',()=>{
+  assert.match(hub,/const user=await sb\.auth\.getUser\(\)/);
+  assert.match(hub,/const allowed=await authRole\(user\.data\.user\.email\)/);
+  assert.match(hub,/Account or connection changed during download/);
+});
 test('source modules parse without a build step',()=>{
   assert.doesNotThrow(()=>new Function(core));
   assert.doesNotThrow(()=>new Function(hub));
