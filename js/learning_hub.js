@@ -707,7 +707,7 @@ function renderSetup(){
         <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--amber)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'Not linked yet'}</span></div>
           <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
         <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
-        <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>.</div></div>
+        <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>. In Review, confirm <b>I saved it in solved/</b>, then choose <b>Check feedback</b> after grading.</div></div><div class="step"><div><b>iPad Safari:</b> Direct folder linking is unavailable. Export the PDF and student-safe .json, move them to outbox/ with the Files app, and download the separate PRIVATE grader file only when needed. Keep that private key in grader/ (never outbox/). Refresh feedback after Cowork finishes.</div></div>
       </div>
     </div>
 `;
@@ -928,36 +928,33 @@ async function makePdf(q, fname, batchId){
 /* ---------- cowork task (written into the linked folder) ---------- */
 function coworkTask(){
   const uid=DEMO?'<your-user-id>':SESSION.user.id;
-  return `# Cowork task — grade my written-test batches
+  return `# Learning Hub — grading instructions
 
-You are my study grader. This folder is the exchange point between my Learning Hub app, my iPad, and you.
+This task belongs to the Writing Test / Learning Hub application. Preserve the original handwritten PDF.
 
-## Folder layout
-- outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename, no answers — this folder syncs to the iPad)
-- grader/  — private full manifest including reference answers. Linked exports use <basename>.json; manual private downloads use <basename>.grader.json. NEVER copy to outbox/.
-- solved/  — PDFs I solved by hand on the iPad (Markup annotations). NEW FILES HERE = YOUR TRIGGER.
-- graded/  — where you move PDFs after grading
+## Folder roles
+- outbox/: student-facing worksheet PDFs and .json manifests (NO answers).
+- grader/: PRIVATE answer manifests (.json from linked export or .grader.json from explicit download). Contains answers, worked solutions, and v2 attempt_id values.
+- solved/: annotated PDFs saved by the learner via the iPad Files app. New files trigger grading.
+- graded/: move the solved PDFs here only after confirmed results.
 
-## When a new PDF appears in solved/
-1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the private answer manifest in grader/ (<basename>.json for linked exports, or <basename>.grader.json for manually downloaded keys). The manifest in outbox/ intentionally has no answers.
-2. Grade each problem from my handwriting: is the method sound, is the final answer right, where exactly did I slip. Be specific and reference my actual steps.
-3. For each problem, insert one row into Supabase (service role key is at ~/.config/writtentest/service_role_key — read it, never copy it into this folder):
+## Process a completed PDF
+1. Match the solved PDF to the private grader manifest and cross-check batch ID and problem ID printed in each PDF footer. Never use outbox/ as an answer key.
+2. Grade each answer from the visible handwriting: method, correctness, specific mistakes, and suggestions. Do not invent work where a page is blank.
+3. For manifest_version=2, each private problem includes a stable attempt_id. Use it verbatim as the UUID id on the written_test_attempts row; this makes retries update an existing record rather than insert a duplicate.
+4. Upsert each v2 result to the General_apps project at /rest/v1/written_test_attempts?on_conflict=id with HTTP POST and the header Prefer: resolution=merge-duplicates,return=minimal. Each row must contain id=attempt_id, problem_id, topic_id, user_id=${uid}, correct, rating (1 to 5), score, max_score, notes, graded_by=cowork, and graded_at in ISO format.
+5. Use the Supabase service-role key only from the local unsynced ~/.config/writtentest/service_role_key. NEVER put that key in an iCloud folder, the PDF, a manifest, a log, a web app or GitHub. Stop on access errors.
+6. Read back all expected attempt_id rows using authenticated, authorized access. Only after every problem has a confirmed Cowork result may you set the written_test_batches status to graded and set graded_at. Do NOT declare completion based merely on a successful upload response.
+7. If any attempt is missing or cannot be verified, keep the batch solved and its PDF in solved/. Report what failed and leave the remaining items for later.
+8. Once all results are verified, move the annotated PDF from solved/ to graded/. The learner can use Review → Check feedback for v2 batches and Refresh feedback to retrieve the graded work.
 
-\`\`\`
-curl -s -X POST "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1/written_test_attempts" \\
-  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\
-  -d '{"problem_id":"<problem_id>","topic_id":"<topic_id>","user_id":"${uid}","correct":true,"rating":4,"score":1,"max_score":1,"notes":"<specific feedback>","graded_by":"cowork"}'
-\`\`\`
+Rating: 5 flawless · 4 correct with minor slips · 3 correct but shaky method · 2 incorrect with a sound idea · 1 incorrect.
 
-rating scale: 5 flawless · 4 right with minor slips · 3 right but shaky method · 2 wrong, right idea · 1 wrong.
+## iPad Safari manual flow
+Safari does not support the desktop folder-link API. Export student PDF and safe .json manifest via Downloads, then use Files to move both into the iCloud outbox/ folder. Export the PRIVATE answer key only when needed and put it in grader/ (never outbox/).
 
-4. Mark the batch graded:
-\`\`\`
-curl -s -X PATCH "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1/written_test_batches?id=eq.<batch_id>" \\
-  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \\
-  -d '{"status":"graded","graded_at":"<now ISO>"}'
-\`\`\`
-5. Move the solved PDF into graded/. Optionally leave a short <basename>-feedback.md next to it summarising the session.
+## Legacy batches
+Legacy WT_ PDFs may not have stable attempt_id values. Do not invent IDs and do not assume legacy regrading is idempotent; flag retries for manual confirmation.
 
-Never modify files in outbox/. Never write secrets into this folder (it syncs to iCloud).`;
+Never change the Supabase schema, RLS policies or authentication. Never reveal the service-role key.`;
 }
