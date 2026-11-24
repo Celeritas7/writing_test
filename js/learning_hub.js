@@ -1284,7 +1284,6 @@ window.syncOfflineNow=async()=>{
   finally{
     await updateOfflineStatus();
     await updateSyncDashboard();
-    if(btn&&btn.isConnected&&!OFFLINE_MODE)btn.disabled=false;
   }
 };
 window.toggleOfflineAutoSync=async enabled=>{
