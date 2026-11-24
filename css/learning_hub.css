@@ -588,3 +588,6 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
   .ml-heading{align-items:center}
   .ml-actions .btn{min-height:44px}
 }
+
+.ml-resume{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}
+.ml-resume .btn{min-height:44px}
