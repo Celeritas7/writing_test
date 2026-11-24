@@ -19,7 +19,12 @@ const TIER_LABEL = {warmup:'warm-up', core:'core', challenge:'challenge'};
 const INTERVALS = {1:1, 2:1, 3:3, 4:7, 5:14}; // rating -> days until due
 const rating5 = r => Math.min(5, Math.max(0, Math.round(Number(r)||0)));
 
-let OFFLINE_MODE=false, OFFLINE_DOWNLOAD_BUSY=false;
+let OFFLINE_MODE=false, OFFLINE_DOWNLOAD_BUSY=false, OFFLINE_LEGACY_PACK=false;
+function completeOfflinePack(p){
+  return !!(p&&p.completeSnapshot===true&&p.counts&&
+    ['subjects','topics','problems','attempts','batches'].every(k=>
+      Array.isArray(p[k])&&p[k].length===p.counts[k]));
+}
 let SESSION=null, ROLE=null, DEMO=false, LOADED=false, DIR_PENDING=null, SUBJECTS=[], TOPICS=[], PROBLEMS=[], ATTEMPTS=[], BATCHES=[], DIR=null;
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 /* an id that is never empty (Japanese or symbol-only names) and never collides with an existing row */
@@ -140,7 +145,7 @@ window.signOut=async()=>{
     }
   }
   if(OFFLINE_MODE){
-    WTOffline.deactivate();OFFLINE_MODE=false;LOADED=false;
+    WTOffline.deactivate();OFFLINE_MODE=false;OFFLINE_LEGACY_PACK=false;LOADED=false;
     SESSION=null;ROLE=null;document.body.classList.remove('study-offline');
     $('app').classList.add('hide');$('gate').classList.remove('hide');
     $('offline-launch').classList.add('hide');
@@ -175,6 +180,7 @@ async function offlineEntry(manual=false){
       return false;
     }
     const p=await WTOffline.pack(owner);
+    OFFLINE_LEGACY_PACK=!completeOfflinePack(p);
     if(SESSION&&SESSION.user&&SESSION.user.id!==owner)return false;
     OFFLINE_MODE=true;WTOffline.activate();
     SESSION={user:{id:owner,email:p.email||''}};
@@ -409,7 +415,9 @@ function route(){
   if(OFFLINE_MODE&&$('main')){
     const banner=document.createElement('div');
     banner.className='wt-offline-notice';banner.setAttribute('role','status');
-    banner.textContent='Ready offline · downloaded study data on this device. New results are saved locally and require later synchronization.';
+    banner.textContent=OFFLINE_LEGACY_PACK?
+      'Older downloaded study pack · completeness not verified. Your existing content was preserved; reconnect and download a verified pack when possible. New work saves locally.':
+      'Ready offline · count-verified study data on this device. New results are saved locally and require later synchronization.';
     $('main').prepend(banner);
   }
 }
@@ -1200,8 +1208,11 @@ async function updateOfflineStatus(){
     const p=owner&&await WTOffline.pack(owner);
     const jobs=owner?await WTOffline.pending(owner):[];
     const ready=owner&&await WTOffline.enrolled(owner)&&await WTOffline.assetsReady();
+    const complete=completeOfflinePack(p);
     if(!el.isConnected||OFFLINE_DOWNLOAD_BUSY)return;
-    el.textContent=(ready?'Ready offline':'Not ready offline')+
+    el.textContent=(ready&&complete?'Ready offline · complete verified pack':
+      ready?'Older offline pack available · completeness not verified':
+      'Not ready offline')+
       (p&&p.version===WTOffline.version?' · '+p.problems.length+' saved problems · updated '+
         new Date(p.savedAt).toLocaleString():' · no current study pack')+
       ' · '+jobs.length+' pending session(s)';
