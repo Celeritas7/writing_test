@@ -297,6 +297,7 @@ async function boot(){
   LOADED=true;
   await restoreDir();
   route();
+  if(!OFFLINE_MODE&&!DEMO)maybeAutoSync();
 }
 function startDemo(){
   SUBJECTS=[{id:'maths',sort_no:1,name:'Maths',tagline:'Aptitude to ANOVA'},{id:'language_study',sort_no:2,name:'Language study',tagline:'Japanese · Kanji'},{id:'mechanical',sort_no:3,name:'Mechanical',tagline:'Engineering core'}];
@@ -737,6 +738,13 @@ window.refreshFeedback=async()=>{
     ]);
     if(a.error||b.error)throw a.error||b.error;
     ATTEMPTS=a.data||[];BATCHES=b.data||[];
+    if(window.WTOffline&&SESSION){
+      try{
+        const waiting=await WTOffline.queuedAttempts(SESSION.user.id);
+        const ids=new Set(waiting.map(r=>r.id));
+        ATTEMPTS=[...waiting,...ATTEMPTS.filter(r=>!ids.has(r.id))];
+      }catch(e){toast('Pending local results could not be read: '+e.message,6000);}
+    }
     BATCH_COVERAGE={};
     renderReview();toast('Feedback and batch status refreshed.');
   }catch(e){toast('Refresh failed; existing feedback kept: '+(e.message||e),6500);}
@@ -850,6 +858,16 @@ function renderSetup(){
         ${OFFLINE_MODE?'<button class="btn sm ghost" type="button" onclick="reconnectStudyOnline()">Reconnect online</button>':''}
         <button class="btn sm ghost" type="button" onclick="exportOfflinePending()" ${DEMO?'disabled':''}>Export pending results</button>
       </div>
+      <div class="wt-sync-panel" aria-label="Sync offline results">
+        <h3 style="margin:15px 0 8px">Synchronize saved results</h3>
+        <p class="wt-offline-hint">Hub Ghost Test and Quick Practice can sync after online verification. Japanese writing sessions remain on this device until the Technical database has a secure idempotent endpoint.</p>
+        <div class="acts" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button id="sync-now-btn" class="btn sm" type="button" onclick="syncOfflineNow()" ${DEMO||OFFLINE_MODE?'disabled':''}>Sync pending Hub / Quick results</button>
+          <button class="btn sm ghost" type="button" onclick="exportSyncReceipts()" ${DEMO?'disabled':''}>Export sync receipts</button>
+        </div>
+        <label class="wt-sync-option"><input type="checkbox" id="wt-auto-sync" onchange="toggleOfflineAutoSync(this.checked)" ${DEMO||OFFLINE_MODE?'disabled':''}> Sync automatically after reconnecting (Hub/Quick only)</label>
+        <p id="sync-status" class="wt-offline-status" role="status" aria-live="polite">Checking pending results…</p>
+      </div>
       <p id="offline-status" class="wt-offline-status" role="status" aria-live="polite">${OFFLINE_MODE?'Offline pack in use · results remain on this device':'Checking downloaded files…'}</p>
       <p class="wt-offline-hint">A Ready offline label requires the complete asset download and a previously verified account on this device. Downloads can resume after interruption. Safari and the installed Home Screen app may have separate storage. Local data is not encrypted, so avoid shared devices.</p>
     </div>
@@ -872,6 +890,7 @@ function renderSetup(){
     </div>
 `;
   updateOfflineStatus();
+  if(typeof updateSyncDashboard==='function')updateSyncDashboard();
 }
 window.refreshGraderTask=async()=>{
   try{
@@ -1216,6 +1235,101 @@ window.exportOfflinePending=async()=>{
     toast('Private pending-results backup downloaded. Results remain queued.',6500);
   }catch(e){toast('Could not export pending results: '+(e.message||e),7500);}
 };
+/* Phase 7: manual or explicit opt-in automatic synchronization. */
+async function updateSyncDashboard(){
+  const el=$('sync-status');
+  if(!el||!window.WTOffline||!SESSION||DEMO)return;
+  const owner=SESSION.user.id;
+  try{
+    const [pending,receipts,auto]=await Promise.all([
+      WTOffline.pending(owner),WTOffline.receipts(owner),
+      WTOffline.getSyncPreference(owner)
+    ]);
+    if(!el.isConnected||!SESSION||SESSION.user.id!==owner)return;
+    const supported=pending.filter(j=>j.kind==='hub'||j.kind==='quick').length;
+    const japanese=pending.filter(j=>j.kind==='japanese').length;
+    el.textContent=supported+' Hub / Quick pending · '+japanese+
+      ' Japanese held locally · '+receipts.length+
+      ' verified sync receipts'+(OFFLINE_MODE?' · reconnect to sync':'');
+    const cb=$('wt-auto-sync');if(cb&&!document.activeElement?.isSameNode(cb))cb.checked=auto;
+    const btn=$('sync-now-btn');if(btn)btn.disabled=OFFLINE_MODE||DEMO||supported===0;
+  }catch(e){if(el.isConnected)el.textContent='Cannot inspect pending sessions: '+(e.message||e);}
+}
+window.syncOfflineNow=async()=>{
+  if(OFFLINE_MODE||DEMO||!SESSION||!window.WTOfflineSync)return;
+  const btn=$('sync-now-btn');
+  if(btn)btn.disabled=true;
+  const owner=SESSION.user.id;
+  try{
+    const all=await WTOffline.pending(owner);
+    const available=all.filter(j=>j.kind==='hub'||j.kind==='quick');
+    if(!available.length){await updateSyncDashboard();return;}
+    const ok=await ask({title:'Verify and sync '+available.length+' pending session(s)?',
+      body:'<p>Syncing checks the current signed-in account and reads any existing records before inserting missing Hub/Quick results. Nothing is deleted locally until the server confirms every attempt. Japanese sessions are not uploaded. You can export a private backup first from Settings.</p>',
+      ok:'Verify and sync',cancel:'Keep results local'});
+    if(!ok)return;
+    const result=await WTOfflineSync.sync(progress=>{
+      const text=$('sync-status');
+      if(text&&text.isConnected)text.textContent='Sync progress: '+progress.done+'/'+progress.total+
+        ' sessions checked · '+progress.synced+' verified · '+progress.blocked+
+        ' retained for review · '+progress.japanese+' Japanese held';
+    });
+    if(SESSION&&SESSION.user.id===owner){
+      const details=result.errors.length?' · '+result.errors[0].error:'';
+      toast('Verified '+result.synced+' session(s), '+result.rows+
+        ' attempts. '+result.blocked+' need review, '+result.japanese+
+        ' Japanese held locally.'+details,9000);
+    }
+  }catch(e){toast('Sync not confirmed; saved results retained: '+(e.message||e),8500);}
+  finally{
+    await updateOfflineStatus();
+    await updateSyncDashboard();
+    if(btn&&btn.isConnected&&!OFFLINE_MODE)btn.disabled=false;
+  }
+};
+window.toggleOfflineAutoSync=async enabled=>{
+  if(OFFLINE_MODE||DEMO||!SESSION||!WTOffline)return;
+  const owner=SESSION.user.id;
+  try{
+    if(enabled){
+      const ok=await ask({title:'Enable automatic Hub/Quick synchronization?',
+        body:'<p>When the app reconnects and your account is verified, it may sync pending Hub/Quick results while you are not actively writing. Japanese sessions always remain local. Conflicts are retained for review, and verified sync receipts are kept on this device.</p>',
+        ok:'Enable auto-sync',cancel:'Keep manual only'});
+      if(!ok)enabled=false;
+    }
+    await WTOffline.setSyncPreference(owner,enabled);
+    toast(enabled?'Auto-sync enabled for this account.':'Auto-sync off; use Sync pending results when ready.',6000);
+  }catch(e){toast('Could not save sync preference: '+e.message,6500);}
+  updateSyncDashboard();
+};
+window.exportSyncReceipts=async()=>{
+  if(!SESSION||DEMO||!window.WTOffline)return;
+  try{
+    const owner=SESSION.user.id,receipts=await WTOffline.receipts(owner);
+    if(!receipts.length){toast('No verified synchronization receipts yet.',5000);return;}
+    const blob=new Blob([JSON.stringify({
+      format:'wt-sync-receipts-v7',owner,exportedAt:new Date().toISOString(),receipts
+    },null,2)],{type:'application/json'});
+    download(blob,'LearningHub_sync_receipts_'+new Date().toISOString().slice(0,10)+'.json');
+    toast('Sync receipts exported. The export contains IDs and dates, not answers.',6000);
+  }catch(e){toast('Could not export sync receipts: '+e.message,6500);}
+};
+function maybeAutoSync(){
+  if(OFFLINE_MODE||DEMO||!LOADED||!window.WTOfflineSync)return;
+  setTimeout(()=>{
+    if(OFFLINE_MODE||!LOADED||!window.WTOfflineSync)return;
+    WTOfflineSync.autoSyncIfEnabled().then(result=>{
+      if(result&&result.synced&&location.hash==='#setup'){
+        updateOfflineStatus();updateSyncDashboard();
+        toast('Automatically verified '+result.synced+' Hub/Quick sessions.',6000);
+      }
+    }).catch(e=>{
+      if(location.hash==='#setup')toast('Automatic sync paused: '+(e.message||e),6500);
+    });
+  },1200);
+}
+addEventListener('online',()=>{if(LOADED&&!OFFLINE_MODE)maybeAutoSync();});
+
 window.reconnectStudyOnline=async()=>{
   if(!OFFLINE_MODE)return;
   if(navigator.onLine===false){toast('Connect to Wi-Fi or mobile data first.',5000);return;}
