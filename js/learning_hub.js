@@ -2,7 +2,16 @@
 const SUPABASE_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e3pDOuxIdstaC7s0a680kQ_R10TrAyv";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-if (window.AkatsukiBroadcast) window.AkatsukiBroadcast(sb, 'writing_test').start();
+/* Optional broadcaster does not block startup when iPad is offline. */
+let BROADCAST_STARTED=false;
+function maybeStartBroadcaster(){
+  if(BROADCAST_STARTED||!navigator.onLine||!window.AkatsukiBroadcast)return;
+  try{window.AkatsukiBroadcast(sb,'writing_test').start();BROADCAST_STARTED=true;}
+  catch(e){/* broadcaster failure must not block offline study */}
+}
+addEventListener('wt-akatsuki-loaded',maybeStartBroadcaster);
+addEventListener('online',maybeStartBroadcaster);
+maybeStartBroadcaster();
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const DAY = 864e5;
