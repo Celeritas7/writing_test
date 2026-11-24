@@ -1,7 +1,7 @@
 /* Learning Hub · Phase 6 iPad offline shell.
  * Never cache Supabase API data, tokens or user-owned answers in the worker.
  * Keep older cache namespaces, IndexedDB and study drafts untouched.
- * A completed user-requested download lives in wt-ipad-assets-phase6. */
+ * A completed user-requested download uses a versioned cache namespace. */
 const VERSION='lh-v2-phase8';
 const OFFLINE_CACHE='wt-ipad-assets-phase8';
 const SHELL=[
