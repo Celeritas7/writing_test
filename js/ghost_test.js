@@ -21,6 +21,7 @@ function renderGhost(){
      GH.ext.owner!==(DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id)){
     GH.ext=null; GH.marks={};GH.strokes=[];
     toast('Imported writing sheet belongs to another account and was not opened.',6500);
+    return renderGhost();
   }
   if(!GH.ext&&(!GH.topic||!tops.some(t=>t.id===GH.topic))){
     if(!tops.length){
