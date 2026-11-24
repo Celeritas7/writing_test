@@ -5,14 +5,14 @@
 (function(){
   'use strict';
   const DB='wt-ipad-offline-v1',VERSION=1,PACK_VERSION=6;
-  const CACHE='wt-ipad-assets-phase7';
+  const CACHE='wt-ipad-assets-phase8';
   const AUTH_KEY='sb-wylxvmkcrexwfpjpbhyy-auth-token';
   const FILES=[
     './','index.html','manifest.webmanifest','css/learning_hub.css',
     'js/worksheet_handoff.js','js/learning_analytics.js','js/learning_hub.js',
     'js/analytics_view.js','js/quick_practice.js','js/multilingual_core.js',
     'js/ghost_test.js','js/japanese_source.js','js/multilingual_packs.js',
-    'js/offline_store.js','js/offline_sync.js','icons/icon-192.png','icons/favicon-32.png',
+    'js/offline_store.js','js/offline_sync.js','js/release_readiness.js','icons/icon-192.png','icons/favicon-32.png',
     'icons/apple-touch-icon.png','fonts/NotoSansJP-Regular.ttf',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
     'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js'
