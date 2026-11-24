@@ -65,7 +65,8 @@
       '<div class="ml-upload"><label for="ml-file">Import vocabulary JSON (maximum 2 MB, 500 words)</label>'+
       '<input type="file" id="ml-file" accept=".json,application/json" onchange="ghUploadLanguagePack(this)" '+
       (loading?'disabled':'')+'>'+
-      '<p class="ml-sub">Accepts wt-writing-pack-v1 or the future approved lex-v1-public-export. Public vocabulary only—no credentials or personal progress.</p></div>'+
+      '<p class="ml-sub">Accepts wt-writing-pack-v1 or the future approved lex-v1-public-export. Public vocabulary only—no credentials or personal progress.</p>'+
+      '<button class="btn sm ghost" type="button" onclick="ghDownloadLanguageTemplate()">Download sample JSON template</button></div>'+
       '<div class="ml-packs">'+entries+'</div>'+
       '<div class="ml-export"><button class="btn sm ghost" type="button" onclick="ghExportLanguageEvidence()" '+
       (!sessions.length?'disabled':'')+'>Export '+sessions.length+' local writing session'+
@@ -162,6 +163,18 @@
       return true;
     });
   }
+  function downloadTemplate(){
+    const content={format:'wt-writing-pack-v1',language_code:'my',
+      name:'Burmese handwriting sample',items:[
+        {id:'sample-1',form:'မင်္ဂလာပါ',reading:'mingalaba',meaning:'hello',script:'Mymr'},
+        {id:'sample-2',form:'ရေ',reading:'ye',meaning:'water',script:'Mymr'}
+      ]};
+    const blob=new Blob([JSON.stringify(content,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='Writing_Pack_Sample.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    toast('Sample vocabulary JSON downloaded. Replace entries with your own approved words.');
+  }
   async function exportEvidence(){
     const id=owner();await load();
     if(!sessions.length)return toast('No local writing sessions to export');
@@ -184,5 +197,6 @@
   window.ghUploadLanguagePack=upload;
   window.ghOpenLanguagePack=open;
   window.ghDeleteLanguagePack=remove;
+  window.ghDownloadLanguageTemplate=downloadTemplate;
   window.ghExportLanguageEvidence=exportEvidence;
 })();
