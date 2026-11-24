@@ -394,6 +394,12 @@ function route(){
   else if(page==='ghost') renderGhost();
   else if(page==='setup') renderSetup();
   else renderLibrary();
+  if(OFFLINE_MODE&&$('main')){
+    const banner=document.createElement('div');
+    banner.className='wt-offline-notice';banner.setAttribute('role','status');
+    banner.textContent='Ready offline · downloaded study data on this device. New results are saved locally and require later synchronization.';
+    $('main').prepend(banner);
+  }
 }
 
 /* ---------- screens ---------- */
@@ -456,7 +462,7 @@ function renderLibrary(){
 window.toggleSub=id=>{ OPEN_SUBS.has(id)?OPEN_SUBS.delete(id):OPEN_SUBS.add(id); renderLibrary(); };
 window.toggleForm=id=>{ const f=$(id); f.classList.toggle('hide'); if(!f.classList.contains('hide')) f.querySelector('input').focus(); };
 /* one submit at a time: the button is disabled while the insert is in flight */
-async function busy(f, fn){ if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
+async function busy(f, fn){ if(OFFLINE_MODE){toast('Library editing needs an online connection. Your downloaded lessons remain available.',5500);return false;} if(f._busy) return false; const b=f.querySelector('button[type=submit],button:not([type])'); f._busy=true; if(b){ b.disabled=true; b.dataset.t=b.textContent; b.textContent='Saving…'; } try{ return await fn(); } finally{ f._busy=false; if(b&&b.isConnected){ b.disabled=false; b.textContent=b.dataset.t; } } }
 window.addSubject=e=>{ e.preventDefault(); busy(e.target, ()=>addSubjectNow(e.target)); return false; };
 async function addSubjectNow(f){
   const name=f.name.value.trim(); if(!name) return false;
@@ -536,8 +542,8 @@ function problemForm(tid,p){
     </form>`;
 }
 /* ---------- edit / delete / reorder ---------- */
-async function dbUpdate(table,id,patch){ if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
-async function dbDelete(table,id){ if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
+async function dbUpdate(table,id,patch){ if(OFFLINE_MODE){toast('Connect to edit the Library.',5000);return false;} if(DEMO) return true; const {error}=await sb.from(table).update(patch).eq('id',id); if(error){ toast('Save failed: '+error.message,6000); return false; } return true; }
+async function dbDelete(table,id){ if(OFFLINE_MODE){toast('Connect to edit the Library.',5000);return false;} if(DEMO) return true; const {error}=await sb.from(table).delete().eq('id',id); if(error){ toast('Delete failed: '+error.message,6000); return false; } return true; }
 window.editProblem=id=>{ EDIT_P=id; route(); setTimeout(()=>{ const el=$('pr-'+id); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },50); };
 window.saveProblem=(e,id)=>{ e.preventDefault(); busy(e.target, async()=>{
   const f=e.target, p=PROBLEMS.find(x=>x.id===id); if(!p) return false;
@@ -607,7 +613,7 @@ function renderBuild(){
     </div>
     <div class="plist">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
-      <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button><a class="btn sm ghost" href="#quick">Quick Practice instead</a>
+      <button class="btn" id="export-btn" ${q.length&&!OFFLINE_MODE?'':'disabled'} onclick="exportBatch()" title="${OFFLINE_MODE?'Connect for tracked PDF export':''}">Export PDF ${DIR?'→ iPad folder':''}</button><a class="btn sm ghost" href="#quick">Quick Practice instead</a>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
     </div><div id="exp-msg" class="msg"></div>
     ${LAST_STUDENT_EXPORT?`<div id="student-download-actions" class="acts" style="margin-top:10px">
@@ -701,6 +707,7 @@ async function batchCoverage(b){
   return coverage;
 }
 window.checkBatchFeedback=async id=>{
+  if(OFFLINE_MODE){toast('Grader verification requires a connection.',5000);return;}
   const b=BATCHES.find(x=>x.id===id);if(!b)return;
   if(!phase1Batch(b)){toast('Legacy batches use manual grading; use Refresh feedback to see new marks.',5500);return;}
   try{
@@ -710,7 +717,7 @@ window.checkBatchFeedback=async id=>{
   }catch(e){toast('Could not check grading: '+(e.message||e),6500);}
 };
 window.refreshFeedback=async()=>{
-  if(FEEDBACK_REFRESHING||DEMO)return;
+  if(FEEDBACK_REFRESHING||DEMO||OFFLINE_MODE){if(OFFLINE_MODE)toast('Reconnect to refresh feedback.',5000);return;}
   FEEDBACK_REFRESHING=true;
   try{
     const [a,b]=await Promise.all([
@@ -725,6 +732,7 @@ window.refreshFeedback=async()=>{
   finally{FEEDBACK_REFRESHING=false;}
 };
 window.setBatchStatus=async(id,status)=>{
+  if(OFFLINE_MODE){toast('Changing batch status requires an online connection.',5500);return;}
   const b=BATCHES.find(x=>x.id===id);if(!b)return;
   if(status==='solved'){
     const ok=await ask({title:'Is your completed PDF in solved/?',
@@ -816,12 +824,23 @@ function renderSetup(){
   $('main').innerHTML=`<div class="kicker">Settings</div><h1 style="margin:4px 0 14px">Settings</h1>
     <div class="card account" style="margin:4px 0 18px">
       <h2 style="margin:0 0 4px">Account</h2>
-      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
+      <p style="margin:0 0 14px;color:var(--soft);font-size:13.5px">${DEMO?'You are exploring with sample data — nothing is saved.':OFFLINE_MODE?'Studying offline as <b>'+esc(whoText())+'</b>. Your access is not being rechecked until you reconnect.':'Signed in as <b>'+esc(whoText())+'</b>'}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':'Sign out'}</button>
+        <button class="btn sm ghost danger" onclick="signOut()">${DEMO?'Leave demo':OFFLINE_MODE?'Lock offline access':'Sign out'}</button>
         ${INSTALL_EVT?'<button class="btn sm" onclick="installApp()">Install app</button>':''}
       </div>
       ${STANDALONE||INSTALLED?'':INSTALL_EVT?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">Install adds Learning Hub to your home screen; it opens full screen and starts offline.</p>':IOS?'<p style="margin:12px 0 0;font-size:12.5px;color:var(--mute)">To install on iPhone or iPad: Share → <b>Add to Home Screen</b>. It opens full screen and starts offline.</p>':''}
+    </div>
+    <div class="card wt-offline-card" style="margin:0 0 18px" aria-label="Study offline">
+      <h2 style="margin:0 0 6px">Study offline on iPad</h2>
+      <p style="font-size:13px;color:var(--soft)">Download the app and your current Library while connected. Open this same Home Screen app with no internet, then practise with Apple Pencil or Quick Practice. No website data will be cleared.</p>
+      <div class="acts" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <button class="btn sm" type="button" onclick="downloadOfflineStudy()" ${DEMO||OFFLINE_MODE?'disabled':''}>Download study offline</button>
+        ${OFFLINE_MODE?'<button class="btn sm ghost" type="button" onclick="reconnectStudyOnline()">Reconnect online</button>':''}
+        <button class="btn sm ghost" type="button" onclick="exportOfflinePending()" ${DEMO?'disabled':''}>Export pending results</button>
+      </div>
+      <p id="offline-status" class="wt-offline-status" role="status" aria-live="polite">${OFFLINE_MODE?'Offline pack in use · results remain on this device':'Checking downloaded files…'}</p>
+      <p class="wt-offline-hint">A Ready offline label requires the complete asset download and a previously verified account on this device. Downloads can resume after interruption. Safari and the installed Home Screen app may have separate storage. Local data is not encrypted, so avoid shared devices.</p>
     </div>
     <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
@@ -841,6 +860,7 @@ function renderSetup(){
       </div>
     </div>
 `;
+  updateOfflineStatus();
 }
 window.refreshGraderTask=async()=>{
   try{
@@ -906,6 +926,7 @@ window.downloadGraderKey=async()=>{
   toast('Private grader key downloaded separately. Keep it out of outbox/.',6000);
 };
 async function exportBatch(){
+  if(OFFLINE_MODE){toast('PDF batch tracking requires an online connection. Use Quick Practice or Ghost Test offline.',6000);return;}
   if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
   if(!q.length) return;
@@ -1126,3 +1147,69 @@ Legacy WT_ PDFs may not have stable attempt_id values. Do not invent IDs and do 
 
 Never change the Supabase schema, RLS policies or authentication. Never reveal the service-role key.`;
 }
+
+/* ---------- Phase 6 offline download, status and private recovery ---------- */
+async function updateOfflineStatus(){
+  const el=$('offline-status');if(!el||!window.WTOffline)return;
+  try{
+    const owner=SESSION&&SESSION.user&&SESSION.user.id;
+    const p=owner&&await WTOffline.pack(owner);
+    const jobs=owner?await WTOffline.pending(owner):[];
+    const ready=owner&&await WTOffline.enrolled(owner)&&await WTOffline.assetsReady();
+    if(!el.isConnected||OFFLINE_DOWNLOAD_BUSY)return;
+    el.textContent=(ready?'Ready offline':'Not ready offline')+
+      (p&&p.version===WTOffline.version?' · '+p.problems.length+' saved problems · updated '+
+        new Date(p.savedAt).toLocaleString():' · no current study pack')+
+      ' · '+jobs.length+' pending session(s)';
+  }catch(e){if(el.isConnected)el.textContent='Offline status unavailable: '+e.message;}
+}
+window.downloadOfflineStudy=async()=>{
+  if(OFFLINE_DOWNLOAD_BUSY||OFFLINE_MODE||DEMO||!SESSION||!window.WTOffline)return;
+  const el=$('offline-status'),btn=document.querySelector('.wt-offline-card button');
+  OFFLINE_DOWNLOAD_BUSY=true;
+  if(btn)btn.disabled=true;
+  try{
+    if(el)el.textContent='Checking current app files…';
+    const result=await WTOffline.cacheAssets(info=>{
+      if(el&&el.isConnected)el.textContent='Downloading '+info.done+'/'+info.total+
+        ' files · '+info.remaining+' remaining · '+(info.bytes/1048576).toFixed(1)+' MB saved so far';
+    });
+    const p={version:WTOffline.version,id:SESSION.user.id,email:SESSION.user.email,
+      role:ROLE,verified:true,savedAt:new Date().toISOString(),
+      subjects:SUBJECTS,topics:TOPICS,problems:PROBLEMS,
+      attempts:ATTEMPTS.filter(a=>!a.pending_local),batches:BATCHES};
+    await WTOffline.savePack(p);
+    toast('Ready offline: '+p.problems.length+' problems and '+
+      result.files+' app files ('+(result.bytes/1048576).toFixed(1)+' MB).',6500);
+  }catch(e){
+    toast('Offline download incomplete; previously saved data was kept: '+(e.message||e),8500);
+    if(el&&el.isConnected)el.textContent='Download incomplete — retry to resume missing files. '+(e.message||e);
+  }finally{
+    OFFLINE_DOWNLOAD_BUSY=false;if(btn&&btn.isConnected)btn.disabled=false;
+    updateOfflineStatus();
+  }
+};
+window.exportOfflinePending=async()=>{
+  if(DEMO||!SESSION||!window.WTOffline)return;
+  try{
+    const jobs=await WTOffline.pending(SESSION.user.id);
+    if(!jobs.length){toast('No pending offline sessions to export.',4500);return;}
+    const ok=await ask({title:'Export private offline results?',
+      body:'<p>This JSON contains your answers, marks, account ID and possibly Japanese writing records. Keep it private. Exporting does not upload, acknowledge or delete any pending session.</p>',
+      ok:'Export private backup',cancel:'Not now'});
+    if(!ok)return;
+    const blob=new Blob([JSON.stringify({format:'wt-offline-pending-v6',
+      owner:SESSION.user.id,exportedAt:new Date().toISOString(),sessions:jobs},null,2)],
+      {type:'application/json'});
+    download(blob,'LearningHub_pending_'+new Date().toISOString().slice(0,10)+'.json');
+    toast('Private pending-results backup downloaded. Results remain queued.',6500);
+  }catch(e){toast('Could not export pending results: '+(e.message||e),7500);}
+};
+window.reconnectStudyOnline=async()=>{
+  if(!OFFLINE_MODE)return;
+  if(navigator.onLine===false){toast('Connect to Wi-Fi or mobile data first.',5000);return;}
+  const ok=await ask({title:'Reload and verify your account online?',
+    body:'<p>Save any unfinished handwriting before reloading. The downloaded pack, IndexedDB drafts and pending sessions will not be cleared. You may need to sign in again.</p>',
+    ok:'Reconnect and reload',cancel:'Keep studying offline'});
+  if(ok)location.reload();
+};
