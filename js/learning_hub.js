@@ -483,7 +483,7 @@ function renderBuild(){
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
       <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
-    </div><div id="exp-msg" class="msg"></div>`;
+    </div><div id="exp-msg" class="msg"></div>${GRADER_KEY_PENDING?`<div style="margin-top:10px"><button class="btn sm ghost" onclick="downloadGraderKey()">Download PRIVATE grader key</button></div>`:``}`;
 }
 window.tog=(set,val)=>{ const s=buildSel[set]; s.has(val)?(s.size>1&&s.delete(val)):s.add(val); renderBuild(); };
 window.buildSel=buildSel; window.renderBuild=renderBuild; window.exportBatch=exportBatch;
@@ -680,7 +680,18 @@ async function writeText(dirHandle, name, text){
 }
 
 /* ---------- export ---------- */
-let EXPORTING=false;
+let EXPORTING=false, GRADER_KEY_PENDING=null;
+/* Grader keys contain answers. Download them separately and only after
+   explicit confirmation, never beside student-facing PDF/manifest by default. */
+window.downloadGraderKey=async()=>{
+  if(!GRADER_KEY_PENDING){toast('No grader key pending. Export a batch first.');return;}
+  const ok=await ask({title:'Download PRIVATE grader answer key?',
+    body:'<p>This JSON contains reference answers. Move it into a private <b>grader/</b> folder, never beside the student PDF or manifest.</p>',
+    ok:'Download private key',cancel:'Not now'});
+  if(!ok)return;
+  download(new Blob([GRADER_KEY_PENDING.content],{type:'application/json'}),GRADER_KEY_PENDING.name);
+  toast('Private grader key downloaded separately. Keep it out of outbox/.',6000);
+};
 async function exportBatch(){
   if(EXPORTING) return;
   const q=queue(buildSel.topic, buildSel.subject, buildSel.tiers, buildSel.kinds, buildSel.count);
@@ -718,12 +729,24 @@ async function exportBatchNow(q, m){
       dest='outbox/ (syncing to iPad)'; written=true;
     }catch(e){ toast('Folder write failed ('+e.message+') — downloading instead.', 5000); }
   }
-  if(!written){ download(blob, fname); download(new Blob([key],{type:'application/json'}), jname); dest='downloaded (PDF + manifest — the grader needs both)'; }
+  if(!written){
+    download(blob, fname);
+    download(new Blob([manifest],{type:'application/json'}), jname); // student-safe: no answer fields
+    GRADER_KEY_PENDING={name:fname.replace(/\.pdf$/,'.grader.json'),content:key};
+    dest='PDF + student manifest downloaded; grader key held separately';
+  } else GRADER_KEY_PENDING=null;
   if(!DEMO){
     const {error}=await sb.from('written_test_batches').insert({id:batchId, topic_id:buildSel.topic==='smart'?null:buildSel.topic, problem_ids:q.map(x=>x.p.id), filename:fname});
     if(error) toast('Batch row not saved ('+error.message+') — run schema.sql.', 5000); else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
   } else BATCHES.unshift({id:batchId,topic_id:buildSel.topic==='smart'?null:buildSel.topic,problem_ids:q.map(x=>x.p.id),filename:fname,status:'exported',created_at:now.toISOString()});
-  m.className='msg ok'; m.textContent=`${fname} → ${dest}. Solve it on the iPad, save into solved/ — Cowork does the rest.`;
+  m.className='msg ok';
+  m.textContent=`${fname} → ${dest}. Solve the PDF on your iPad and save it into solved/.`;
+  if(GRADER_KEY_PENDING){
+    m.append(document.createTextNode(' Private answers were NOT downloaded with the student files.'),document.createElement('div'));
+    const b=document.createElement('button'); b.className='btn sm ghost'; b.style.marginTop='10px';
+    b.textContent='Download PRIVATE grader answer key'; b.addEventListener('click',downloadGraderKey);
+    m.appendChild(b);
+  }
 }
 function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
 
@@ -816,12 +839,12 @@ You are my study grader. This folder is the exchange point between my Learning H
 
 ## Folder layout
 - outbox/  — problem PDFs I exported, each with a matching .json manifest (same basename, no answers — this folder syncs to the iPad)
-- grader/  — the full manifest for each batch, including reference answers. READ ANSWERS FROM HERE.
+- grader/  — private full manifest including reference answers. Linked exports use <basename>.json; manual private downloads use <basename>.grader.json. NEVER copy to outbox/.
 - solved/  — PDFs I solved by hand on the iPad (Markup annotations). NEW FILES HERE = YOUR TRIGGER.
 - graded/  — where you move PDFs after grading
 
 ## When a new PDF appears in solved/
-1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the matching manifest in grader/ (same basename as the original export) for prompts, given data and reference answers.
+1. Read its footer on each page: \`batch:<batch_id>  problem:<problem_id>\`. Open the private answer manifest in grader/ (<basename>.json for linked exports, or <basename>.grader.json for manually downloaded keys). The manifest in outbox/ intentionally has no answers.
 2. Grade each problem from my handwriting: is the method sound, is the final answer right, where exactly did I slip. Be specific and reference my actual steps.
 3. For each problem, insert one row into Supabase (service role key is at ~/.config/writtentest/service_role_key — read it, never copy it into this folder):
 
