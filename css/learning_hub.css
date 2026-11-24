@@ -488,3 +488,75 @@ body.gh-boxes .gh-item.retry{border-color:#e0b3ad;background:#fffaf8}
   .qp-mode{min-height:65px}
   .qp-footer .btn{min-height:44px}
 }
+
+
+/* ---- Phase 3 · Learning analytics --------------------------------- */
+.an-muted{font-size:12.5px;color:var(--mute);line-height:1.55}
+.an-controls{display:flex;gap:20px;align-items:end;flex-wrap:wrap;margin:18px 0 10px}
+.an-controls select{min-width:210px;max-width:100%}
+.an-control-label{display:block;font:500 10.5px "IBM Plex Mono",monospace;letter-spacing:1px;text-transform:uppercase;color:var(--mute);margin-bottom:7px}
+.an-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 16px}
+.an-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.an-section{margin:18px 0}
+.an-section h2{margin:0 0 6px}
+.an-sources{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
+.an-source{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--card);min-width:0}
+.an-source h3{font-size:13px}
+.an-source p{font-size:12.5px;margin:3px 0;color:var(--soft)}
+.an-source .an-muted{color:var(--mute);font-size:11.5px}
+.an-large{font:700 30px/1.3 "Space Grotesk",sans-serif;font-variant-numeric:tabular-nums;margin-top:6px}
+.an-legend{display:flex;gap:8px 18px;flex-wrap:wrap;margin:14px 0 8px}
+.an-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--soft)}
+.an-dot{display:inline-block;width:11px;height:11px;border-radius:3px;flex-shrink:0}
+.an-seg-cowork{background:var(--blue)}
+.an-seg-self{background:var(--ok)}
+.an-seg-ghost{background:var(--amber)}
+.an-seg-other{background:var(--mute)}
+.an-plot{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(48px,1fr);gap:10px;overflow-x:auto;
+  border-bottom:1px solid var(--line);padding:12px 6px 0;scrollbar-width:thin}
+.an-column{display:flex;flex-direction:column;align-items:stretch;justify-content:end;min-width:48px;gap:4px;min-height:205px}
+.an-count{text-align:center;font:500 12px "IBM Plex Mono",monospace;color:var(--soft);font-variant-numeric:tabular-nums}
+.an-bar{display:flex;flex-direction:column-reverse;height:150px;min-height:150px;border-bottom:1px solid var(--line)}
+.an-seg{display:block;min-height:0;flex:0 0 auto}
+.an-date{text-align:center;font:500 10.5px/1.3 "IBM Plex Mono",monospace;color:var(--mute);
+  min-height:42px;overflow-wrap:anywhere}
+.an-table-wrap{overflow-x:auto;margin:8px 0}
+.an-table{min-width:560px}
+.an-section details{font-size:13px;margin-top:12px;color:var(--soft)}
+.an-section summary{cursor:pointer}
+.an-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.an-focus,.an-topics{display:grid;gap:10px;margin-top:16px}
+.an-focus-item,.an-topic-row{border:1px solid var(--line);padding:12px;border-radius:10px;background:var(--card);min-width:0}
+.an-focus-header,.an-topic-head{display:flex;justify-content:space-between;gap:10px;align-items:start;margin-bottom:5px}
+.an-focus-header strong,.an-topic-head strong{overflow-wrap:anywhere}
+.an-focus-header .chip{flex-shrink:0}
+.an-note{font-size:12.5px;color:var(--soft);margin:8px 0;line-height:1.5;overflow-wrap:anywhere}
+.an-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.an-topic-head .btn{flex-shrink:0}
+.an-topic-meta{font-size:12px;color:var(--soft);margin:8px 0}
+.an-coverage{height:7px;border-radius:999px;background:#eeece4;overflow:hidden}
+.an-coverage span{display:block;height:100%;background:var(--accent)}
+.an-footnote{margin:16px 0 28px}
+@media(max-width:1100px){
+  .an-layout{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .an-sources{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  /* Preserve the six existing phone tabs: Analytics is accessible from Home and Review. */
+  .nav-item.an-nav{display:none!important}
+  .an-overview{grid-template-columns:1fr 1fr}
+  .an-overview .tile:first-child{grid-column:1/-1}
+  .an-plot{grid-auto-columns:minmax(60px,1fr)}
+  .an-column{min-width:60px}
+}
+@media(max-width:560px){
+  .an-controls{align-items:stretch}
+  .an-controls>div{width:100%}
+  .an-controls select{width:100%}
+  .an-sources{grid-template-columns:1fr}
+  .an-section{padding:16px 14px}
+  .an-overview .tile .big{font-size:29px}
+  .an-toolbar .btn{min-height:44px}
+}
