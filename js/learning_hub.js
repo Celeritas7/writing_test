@@ -66,7 +66,7 @@ function toast(msg, ms=3200){ const t=$('toast'); t.textContent=msg; t.classList
 
 /* ---------- sidebar collapse ----------------------------------------
    data-icon feeds the collapsed rail's ::before glyph. */
-const NAV_ICONS={home:'⌂', library:'▤', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
+const NAV_ICONS={home:'⌂', library:'▤', quick:'⚡', build:'✎', review:'★', ghost:'筆', setup:'⚙'};
 (function initNav(){
   for(const el of document.querySelectorAll('.nav-item')) el.dataset.icon=NAV_ICONS[el.dataset.nav]||'•';
   const b=document.getElementById('nav-toggle'); if(!b) return;
@@ -266,6 +266,7 @@ function route(){
   $('cnt-lib').textContent=PROBLEMS.length; $('cnt-due').textContent=dueN||''; $('cnt-fb').textContent=ATTEMPTS.length||''; $('cnt-home').textContent=dueN||''; $('cnt-home').setAttribute('aria-hidden','true'); $('cnt-setup').setAttribute('aria-hidden','true'); $('cnt-setup').textContent=DIR?'✓':DEMO?'':'!'; $('cnt-setup').dataset.warn=String(!DIR&&!DEMO); document.querySelector('.nav-item[data-nav=home]').setAttribute('aria-label', dueN?'Home, '+dueN+' due':'Home'); document.querySelector('.nav-item[data-nav=setup]').setAttribute('aria-label', !DIR&&!DEMO?'Settings, iCloud folder not linked':'Settings'); $('cnt-setup').title=DIR?'iCloud folder linked':DIR_PENDING?'iCloud folder needs reconnecting':'iCloud folder not linked yet';
   if(page==='home') renderHome();
   else if(page==='topic') renderTopic(arg);
+  else if(page==='quick') renderQuickPractice();
   else if(page==='build') renderBuild();
   else if(page==='review') renderReview();
   else if(page==='ghost') renderGhost();
@@ -484,7 +485,7 @@ function renderBuild(){
     </div>
     <div class="plist">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px">
-      <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button>
+      <button class="btn" id="export-btn" ${q.length?'':'disabled'} onclick="exportBatch()">Export PDF ${DIR?'→ iPad folder':''}</button><a class="btn sm ghost" href="#quick">Quick Practice instead</a>
       ${DIR?'':DIR_PENDING?'<span style="font-size:13px;color:var(--mute)">Folder needs reconnecting after reload — <a href="#" onclick="reconnectDir();return false">reconnect '+esc(DIR_PENDING.name)+'</a> or export will download.</span>':'<span style="font-size:13px;color:var(--mute)">No folder linked — the PDF will download instead. <a href="#setup">Link your iCloud folder</a> for automatic export.</span>'}
     </div><div id="exp-msg" class="msg"></div>
     ${LAST_STUDENT_EXPORT?`<div id="student-download-actions" class="acts" style="margin-top:10px">
@@ -532,7 +533,7 @@ function renderHome(){
         <div class="kicker">Due today</div>
         <div class="big">${weak+due+(jpDue||0)}</div>
         <div class="sub">${weak?`<span class="chip weak">${weak} weak</span> `:''}${due?`<span class="chip due">${due} due</span> `:''}${jpDue!=null?`<span class="chip">${jpDue} words</span>`:''}${!(weak+due+(jpDue||0))?'Nothing waiting — add new problems or write a sheet.':''}</div>
-        <div class="acts"><a class="btn sm" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
+        <div class="acts"><a class="btn sm" href="#quick">Quick Practice</a><a class="btn sm ghost" href="#build">Build a batch</a>${startJp||`<a class="btn sm ghost" href="#ghost">Write a sheet</a>`}</div>
       </div>
       <div class="tile">
         <div class="kicker">Streak</div>
