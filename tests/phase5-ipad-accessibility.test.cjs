@@ -108,6 +108,12 @@ test('marking updates VoiceOver label after each changed rating',()=>{
   fn('p1',3);assert.match(label,/Item 1: wrong/);
   assert.equal(score,2);
 });
+test('Ghost marks use native buttons for VoiceOver activation',()=>{
+  assert.match(ghost,/<button type="button" class="gh-n/);
+  assert.match(ghost,/onclick="ghMark\(event/);
+  assert.doesNotMatch(ghost,/role="button" tabindex="0" aria-label="Item/);
+  assert.match(css,/\.gh-n\{[^}]*appearance:none/);
+});
 test('toggle controls expose their current pressed and expanded state',()=>{
   const values={};
   const control=key=>({setAttribute:(k,v)=>{values[key+':'+k]=v;}});
