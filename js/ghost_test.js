@@ -106,7 +106,7 @@ const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
 window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
 function ghPanelHtml(){ return GH_PANEL&&window.jpPanelHtml ? window.jpPanelHtml() : ''; }
-window.ghSeed=async()=>{
+window.ghSeed=async()=>{ if(GH.savePrepared&&!GH.locked){toast('Retry the interrupted save first.');return;}
   const KJ=[['生える','はえる'],['六人','ろくにん'],['歩く','あるく'],['先々月','せんせんげつ'],['七人','しちにん'],['一年','いちねん'],['小学校','しょうがっこう'],['少女','しょうじょ'],['千本','せんぼん'],['あの方','あのかた'],['五万円','ごまんえん'],['先週','せんしゅう'],['上手(な)','じょうず'],['休み','やすみ'],['時間','じかん'],['のぼり','上り'],['げんき','元気'],['ちいさい','小さい'],['てま','手間'],['つぶら','円ら']];
   let sub=SUBJECTS.find(s=>GH_LANG.test(s.name));
   if(!sub){ sub={id:'language_study', name:'Language Study', sort_no:(SUBJECTS.length||0)+1};
@@ -123,8 +123,12 @@ window.ghSeed=async()=>{
   GH.topic=topic.id; ghFresh(); renderGhost();
 };
 /* fresh sheet: new marks, ink and clocks, and the post-save lock lifted */
-window.ghFresh=()=>{ GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false;
-  GH.sessionId=null; GH.attemptIds={}; GH.attemptTime=null; ghDraftClear(); };
+window.ghFresh=()=>{
+  if(GH.savePrepared&&!GH.locked){toast('This sheet has an interrupted save. Retry Save results before starting another sheet.',8500);return false;}
+  GH.marks={}; GH.strokes=[]; GH.time={}; GH.focus=null; GH.locked=false;
+  GH.sessionId=null; GH.attemptIds={}; GH.attemptTime=null; GH.savePrepared=false;
+  ghDraftClear(); return true;
+};
 
 /* ---- local draft ----------------------------------------------------
    Ink, marks, clocks and the loaded set go to IndexedDB (the hub's idb kv
@@ -139,7 +143,8 @@ async function ghDraftPersist(){
   const strokes=GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p}));
   await idb.set(GH_DRAFT_KEY,{ts:Date.now(), topic:GH.topic, ext:GH.ext, seq:!!GH.seq,
     marks:GH.marks, strokes, time:GH.time, sessionId:GH.sessionId||null,
-    attemptIds:GH.attemptIds||{}, attemptTime:GH.attemptTime||null});
+    attemptIds:GH.attemptIds||{}, attemptTime:GH.attemptTime||null,
+    savePrepared:!!GH.savePrepared});
 }
 function ghDraftSave(){ clearTimeout(ghDraftT); ghDraftT=setTimeout(async()=>{
   if(GH.locked||!GH.items.length||typeof idb==='undefined') return;
@@ -154,10 +159,11 @@ async function ghDraftRestore(){
   if(!d||!d.ts||Date.now()-d.ts>GH_DRAFT_TTL) return false;
   if(d.ext) GH.ext=d.ext; else if(d.topic) GH.topic=d.topic;
   GH.seq=d.seq; GH.marks=d.marks||{}; GH.strokes=d.strokes||[]; GH.time=d.time||{};
-  GH.sessionId=d.sessionId||null; GH.attemptIds=d.attemptIds||{}; GH.attemptTime=d.attemptTime||null; GH.locked=false;
+  GH.sessionId=d.sessionId||null; GH.attemptIds=d.attemptIds||{}; GH.attemptTime=d.attemptTime||null;
+  GH.savePrepared=!!d.savePrepared; GH.locked=false;
   return true;
 }
-window.ghPick=id=>{ GH.ext=null; GH.topic=id; ghFresh(); renderGhost(); };
+window.ghPick=id=>{ if(ghFresh()===false)return; GH.ext=null; GH.topic=id; renderGhost(); };
 /* ---- session log: one entry per saved sheet, local to this device, so Review
    can show Japanese-database sheets (they never enter written_test_attempts)
    and offer a retry sheet built from the wrong ones. */
@@ -172,8 +178,9 @@ function ghLogSession(){
 window.ghRetrySession=i=>{
   const s=ghSessions()[i]; if(!s) return;
   const wrong=s.items.filter(x=>x.m!==1), pick=wrong.length?wrong:s.items;
+  if(ghFresh()===false)return;
   GH.ext={label:'Retry · '+s.label, src:s.src, items:pick.map((x,k)=>({...x, number:k+1, unit_no:k+1, src:s.src==='jp'?'jp':undefined}))};
-  ghFresh(); location.hash='ghost'; renderGhost();
+  location.hash='ghost'; renderGhost();
 };
 window.ghMark=(e,id)=>{
   e.stopPropagation();
@@ -262,7 +269,8 @@ async function ghLoadLimits(){
 
 /* ---- marking: tap to cycle, or arm a brush and drag across items ---- */
 function ghSetMark(id, m){
-  if(GH.locked) return;
+  if(GH.locked)return;
+  if(GH.savePrepared){toast('Save is pending — retry Save results before changing marks.',5500);return;}
   GH.marks[id]=m;
   const cell=document.querySelector('.gh-item[data-gid="'+String(id).replace(/"/g,'\\"')+'"]');
   if(cell){
@@ -311,12 +319,14 @@ function ghInitBrush(){
 }
 /* fill only the UNMARKED items — never overwrites a ✗ or △ you set */
 window.ghRestPass=()=>{
+  if(GH.savePrepared){toast('Save pending — marks cannot change until retry completes.',5000);return;}
   let n=0;
   for(const p of GH.items) if(!GH.marks[p.id]){ ghSetMark(p.id, 1); n++; }
   toast(n ? n+' unmarked '+(n===1?'item':'items')+' marked ✓' : 'Every item is already marked', 2200);
 };
 /* wipe every mark, with a warning. Ink is untouched. */
 window.ghClearMarks=async()=>{
+  if(GH.savePrepared){toast('Save pending — keep your marks and retry Save results.',6000);return;}
   const n=Object.keys(GH.marks).filter(k=>GH.marks[k]).length;
   if(!n) return toast('No markings to clear', 1800);
   if(!await ask({title:'Clear all '+n+' marks?', body:"<p>Your handwriting stays. This can't be undone.</p>", ok:'Clear marks', cancel:'Keep marks', danger:true})) return;
@@ -620,7 +630,7 @@ async function ghSaveNow(){
   if(!rows.length){ toast('Mark at least one item first.'); return; }
   if(GH.locked) return;
   const unmarked=GH.items.length-rows.length;
-  if(unmarked){
+  if(unmarked&&!GH.savePrepared){
     const a=await ask({title:unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked', body:'<p>Unmarked items are not saved. Mark the rest ✓, save only the '+rows.length+' you marked, or go back.</p>', ok:'Mark rest ✓ and save', alt:'Save '+rows.length+' only', cancel:'Go back'});
     if(!a) return;
     if(a===true){ ghRestPass(); return ghSaveNow(); }
@@ -635,8 +645,9 @@ async function ghSaveNow(){
     toast('Japanese results NOT saved — check the project URL, key and user ID. Your writing is kept.',8500);return;
   }
   GH.sessionId=GH.sessionId||crypto.randomUUID();
+  GH.savePrepared=true;
   try{await ghDraftPersist();}
-  catch(e){toast('Cannot save a safety copy on this device. Nothing sent; check storage. '+e.message,8500);return;}
+  catch(e){GH.savePrepared=false; toast('Cannot save a safety copy on this device. Nothing sent; check storage. '+e.message,8500);return;}
   if(!DEMO&&hub){
     /* Client-generated attempt IDs make a retry safe when the previous
        request succeeded on the server but its response was lost. */
@@ -684,6 +695,7 @@ async function ghSaveNow(){
     }
   }
   toast((GH.ext?log_n(rows.length):rows.length+' result'+(rows.length===1?'':'s')+' saved')+extra, 5200);
+  GH.savePrepared=false;
   ghDraftClear(); // essential review + marking writes were acknowledged
   if(!DEMO) ghLogSession();
   const end=ghEnding(plan);
