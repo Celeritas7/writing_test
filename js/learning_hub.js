@@ -874,6 +874,17 @@ function renderSetup(){
       <p id="offline-status" class="wt-offline-status" role="status" aria-live="polite">${OFFLINE_MODE?'Offline pack in use · results remain on this device':'Checking downloaded files…'}</p>
       <p class="wt-offline-hint">A Ready offline label requires the complete asset download and a previously verified account on this device. Downloads can resume after interruption. Safari and the installed Home Screen app may have separate storage. Local data is not encrypted, so avoid shared devices.</p>
     </div>
+    <div class="card wt-qa-card" id="wt-release-checks" aria-label="Phase 8 iPad release checks" style="margin:0 0 18px">
+      <h2 style="margin:0 0 6px">iPad release diagnostics</h2>
+      <p class="wt-offline-hint">Run read-only checks on this device. This cannot test Apple Pencil, airplane-mode relaunch, or live synchronization by itself. It does not upload or erase data.</p>
+      <div class="acts" style="display:flex;flex-wrap:wrap;gap:10px">
+        <button class="btn sm ghost" type="button" onclick="runIpadDiagnostics()">Run iPad readiness checks</button>
+        <button id="wt-qa-export" class="btn sm ghost" type="button" onclick="exportIpadDiagnostics()" disabled>Export safe diagnostic report</button>
+      </div>
+      <p id="wt-qa-status" role="status" aria-live="polite" class="wt-offline-status">Not run on this installation</p>
+      <div id="wt-qa-results"></div>
+      <p class="wt-offline-hint">Release sign-off also needs hands-on Safari/Home Screen, Apple Pencil, airplane mode, restore and sync tests. Avoid clearing website data.</p>
+    </div>
     <h2 style="margin:0 0 4px">How the loop works</h2>
     <div class="flow">
       <div class="node"><b>Build & export</b><span>PDF + manifest → outbox/</span></div><div class="arr">→</div>
@@ -1207,12 +1218,26 @@ window.downloadOfflineStudy=async()=>{
       if(el&&el.isConnected)el.textContent='Downloading '+info.done+'/'+info.total+
         ' files · '+info.remaining+' remaining · '+(info.bytes/1048576).toFixed(1)+' MB saved so far';
     });
-    const p={version:WTOffline.version,id:SESSION.user.id,email:SESSION.user.email,
-      role:ROLE,verified:true,savedAt:new Date().toISOString(),
-      subjects:SUBJECTS,topics:TOPICS,problems:PROBLEMS,
-      attempts:ATTEMPTS.filter(a=>!a.pending_local),batches:BATCHES};
+    if(!window.WTRelease)throw Error('Phase 8 snapshot verifier is missing. Reopen the updated app online.');
+    const expectedOwner=SESSION.user.id;
+    const user=await sb.auth.getUser();
+    if(user.error||!user.data||!user.data.user||
+       user.data.user.id!==expectedOwner)
+      throw Error('Could not verify your active account. Reconnect and sign in before downloading.');
+    const allowed=await authRole(user.data.user.email);
+    if(!allowed||allowed.error)
+      throw Error('Cannot verify the access list before downloading the study pack.');
+    const complete=await WTRelease.readCompleteSnapshot(sb,info=>{
+      if(el&&el.isConnected)
+        el.textContent='Verifying complete '+info.table+' history: '+
+          info.downloaded+'/'+info.total+' rows';
+    });
+    if(!SESSION||SESSION.user.id!==expectedOwner||OFFLINE_MODE)
+      throw Error('Account or connection changed during download; previous pack preserved');
+    const p={version:WTOffline.version,id:expectedOwner,email:SESSION.user.email,
+      role:ROLE,verified:true,savedAt:new Date().toISOString(),...complete};
     await WTOffline.savePack(p);
-    toast('Ready offline: '+p.problems.length+' problems and '+
+    toast('Ready offline: '+p.problems.length+' verified problems and '+
       result.files+' app files ('+(result.bytes/1048576).toFixed(1)+' MB).',6500);
   }catch(e){
     toast('Offline download incomplete; previously saved data was kept: '+(e.message||e),8500);
@@ -1342,4 +1367,52 @@ window.reconnectStudyOnline=async()=>{
     body:'<p>Save any unfinished handwriting before reloading. The downloaded pack, IndexedDB drafts and pending sessions will not be cleared. You may need to sign in again.</p>',
     ok:'Reconnect and reload',cancel:'Keep studying offline'});
   if(ok)location.reload();
+};
+
+
+/* Phase 8: read-only, sanitized device diagnostics. Never upload a report. */
+let LAST_IPAD_DIAGNOSTIC=null,IPAD_DIAGNOSTIC_RUNNING=false;
+window.runIpadDiagnostics=async()=>{
+  if(IPAD_DIAGNOSTIC_RUNNING||!window.WTRelease||!window.WTOffline)return;
+  const status=$('wt-qa-status'),results=$('wt-qa-results');
+  IPAD_DIAGNOSTIC_RUNNING=true;LAST_IPAD_DIAGNOSTIC=null;
+  const exportButton=$('wt-qa-export');if(exportButton)exportButton.disabled=true;
+  if(status)status.textContent='Inspecting cached app files and device storage…';
+  try{
+    const owner=SESSION&&SESSION.user&&SESSION.user.id||await WTOffline.offlineOwner();
+    const audit=await WTRelease.audit({
+      offline:WTOffline,owner,navigator,storage:navigator.storage,
+      modeIsStandalone:STANDALONE||INSTALLED
+    });
+    LAST_IPAD_DIAGNOSTIC=audit;
+    if(status&&status.isConnected){
+      const v=audit.summary;
+      status.textContent=v.passed+' checks passed · '+v.warnings+
+        ' need review · '+v.failures+
+        ' need attention. Physical device acceptance: not yet verified.';
+    }
+    if(results&&results.isConnected){
+      results.textContent='';
+      const list=document.createElement('ul');list.className='wt-qa-list';
+      for(const item of audit.checks){
+        const li=document.createElement('li');
+        const head=document.createElement('strong');
+        head.textContent=(item.status==='pass'?'✓ ':
+          item.status==='warn'?'Review: ':'Check: ')+item.label;
+        const sub=document.createElement('span');sub.textContent=item.detail;
+        li.append(head,sub);list.appendChild(li);
+      }
+      results.appendChild(list);
+    }
+    if(exportButton&&exportButton.isConnected)exportButton.disabled=false;
+  }catch(e){
+    if(status&&status.isConnected)status.textContent='Readiness checks could not finish: '+(e.message||e);
+  }finally{IPAD_DIAGNOSTIC_RUNNING=false;}
+};
+window.exportIpadDiagnostics=()=>{
+  if(!LAST_IPAD_DIAGNOSTIC){toast('Run the device checks before exporting.',4500);return;}
+  const report=LAST_IPAD_DIAGNOSTIC;
+  download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+    'LearningHub_iPad_Phase8_diagnostics_'+new Date().toISOString().slice(0,10)+'.json');
+  toast('Private-free diagnostic summary saved. This does not certify physical iPad tests.',6500);
 };
