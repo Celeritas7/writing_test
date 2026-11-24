@@ -16,7 +16,8 @@ function renderGhost(){
     <p style="color:var(--mute);margin:0 0 14px;font-size:13.5px">Pick a set from your Japanese database, or seed a local topic.</p>
     <button class="btn sm" onclick="ghImportPanel()">Browse my Japanese database</button>
     <button class="btn sm ghost" onclick="ghSeed()">Create “Kanji · Certi/Diploma” with 20 items</button>
-    <button class="btn sm ghost" onclick="ghToggleLanguagePacks()">🌐 Multilingual packs</button></div>${ghPanelHtml()}${window.ghPackPanelHtml?ghPackPanelHtml():''}`; return; }
+    <button class="btn sm ghost" onclick="ghToggleLanguagePacks()">🌐 Multilingual packs</button>
+    <button class="btn sm ghost" onclick="ghOpenOfflineJapanese()">Saved Japanese sheet</button></div>${ghPanelHtml()}${window.ghPackPanelHtml?ghPackPanelHtml():''}`; return; }
   if(GH.ext&&GH.ext.src==='lex_import'&&
      GH.ext.owner!==(DEMO?'demo':SESSION&&SESSION.user&&SESSION.user.id)){
     GH.ext=null; GH.marks={};GH.strokes=[];
@@ -33,7 +34,8 @@ function renderGhost(){
   const label = GH.ext ? GH.ext.label : (TOPICS.find(x=>x.id===GH.topic)||{}).name;
   GH.items = GH.ext ? GH.ext.items : PROBLEMS.filter(p=>p.topic_id===GH.topic&&p.answer).sort((a,b)=>(a.unit_no||a.number)-(b.unit_no||b.number)).slice(0,20);
   const pills=[`<button class="pill-t ${GH.ext&&GH.ext.src!=='lex_import'?'on':''}" onclick="ghImportPanel()">日 Japanese database</button>`,
-    `<button class="pill-t ${GH.ext&&GH.ext.src==='lex_import'?'on':''}" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>`]
+    `<button class="pill-t ${GH.ext&&GH.ext.src==='lex_import'?'on':''}" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>`,
+    `<button class="pill-t" onclick="ghOpenOfflineJapanese()">Saved Japanese sheet</button>`]
     .concat(tops.map(x=>`<button class="pill-t ${!GH.ext&&GH.topic===x.id?'on':''}" onclick="ghPick('${esc(x.id)}')">${esc(x.name)}</button>`)).join('');
   // On narrow screens the large desktop header is hidden; keep source
   // switching and Hub-topic selection reachable for touch and VoiceOver.
@@ -41,6 +43,7 @@ function renderGhost(){
   const ghMobileSources=`<div class="gh-source-mobile" role="group" aria-label="Choose writing source">
     <button class="btn sm ghost" type="button" onclick="ghImportPanel()" aria-expanded="${!!GH_PANEL}">Japanese sets</button>
     <button class="btn sm ghost" type="button" onclick="ghToggleLanguagePacks()">🌐 Language packs</button>
+    <button class="btn sm ghost" type="button" onclick="ghOpenOfflineJapanese()">Saved Japanese sheet</button>
     ${tops.length?`<label for="gh-mobile-topic">Hub topic</label>
       <select id="gh-mobile-topic" aria-label="Choose Hub writing topic" onchange="if(this.value)ghPick(this.value)">
         <option value="" ${GH.ext?'selected':''} disabled>Select topic</option>${ghMobileTopicOptions}
@@ -64,6 +67,8 @@ function renderGhost(){
     ${ghMobileSources}
     ${ghPanelHtml()}
     ${window.ghPackPanelHtml?ghPackPanelHtml():''}
+    ${GH.ext&&GH.ext.src!=='lex_import'&&GH.ext.src!=='hub'?
+      '<div class="gh-online-sheet-download"><button class="btn sm ghost" onclick="ghDownloadJapanese()" '+(window.WTOffline&&WTOffline.shouldQueue()?'disabled':'')+'>Download this Japanese sheet offline</button></div>':''}
     ${GH.ext&&GH.ext.src==='lex_import'?'<p class="ml-local-note">Local-only imported practice · results are saved on this device, not sent to Japanese Study or the shared vocabulary database.</p>':''}
     <div class="gh-bar">
       <button class="btn sm ghost gh-t on" id="gh-pen" aria-pressed="${GH.tool==='pen'}" onclick="ghTool('pen')">✎ Pen</button>
@@ -135,7 +140,41 @@ const ghCfg=()=>{ let c={}; try{ c=JSON.parse(localStorage.getItem('wt_jp_source
   const set={}; for(const k in c) if(c[k]!=null&&String(c[k]).trim()!=='') set[k]=c[k];
   return Object.assign({}, JP_DEFAULTS, {url:JP_URL, key:JP_ANON_KEY, user:JP_USER_ID}, set); };
 const ghCfgSet=o=>localStorage.setItem('wt_jp_source', JSON.stringify(o));
-window.ghImportPanel=()=>{ GH_PANEL=!GH_PANEL; renderGhost(); if(GH_PANEL&&window.jpLoadTab) jpLoadTab(); };
+window.ghImportPanel=()=>{
+  if(window.WTOffline&&WTOffline.shouldQueue()){
+    toast('Japanese database browsing needs the internet. Use Saved Japanese sheet or a downloaded Hub topic.',7000);
+    return;
+  }
+  GH_PANEL=!GH_PANEL;renderGhost();
+  if(GH_PANEL&&window.jpLoadTab)jpLoadTab();
+};
+window.ghDownloadJapanese=async()=>{
+  if(!window.WTOffline||DEMO||!SESSION||WTOffline.shouldQueue()||
+     !GH.ext||GH.ext.src==='lex_import'){
+    toast('Choose a Japanese database sheet while online first.',6000);return;
+  }
+  try{
+    await WTOffline.saveJapanese(SESSION.user.id,{label:GH.ext.label,items:GH.items});
+    toast('Japanese sheet saved on this iPad: '+GH.items.length+' items. Open it without Internet from Ghost Test.',6500);
+  }catch(e){toast('Japanese download failed: '+(e.message||e),7000);}
+};
+window.ghOpenOfflineJapanese=async()=>{
+  if(!window.WTOffline||!SESSION)return;
+  try{
+    const saved=await WTOffline.japanese(SESSION.user.id);
+    if(!saved||!saved.items||!saved.items.length)throw Error('No saved Japanese sheet. Download one while online.');
+    if(GH.savePrepared&&!GH.locked)throw Error('Finish retrying the interrupted save first');
+    if(GH.strokes.length||Object.values(GH.marks||{}).some(Boolean)){
+      const proceed=await ask({title:'Open saved Japanese sheet?',
+        body:'<p>Unsubmitted handwriting on the current sheet will be cleared. Save it first if you need it.</p>',
+        ok:'Open saved sheet',cancel:'Keep current sheet',danger:true});
+      if(!proceed)return;
+    }
+    if(ghFresh()===false)return;
+    GH.ext={label:saved.label+' · downloaded',src:'jp',items:saved.items};
+    GH_PANEL=false;GH.seq=false;renderGhost();
+  }catch(e){toast('Could not open Japanese sheet: '+(e.message||e),7000);}
+};
 window.ghCfgField=(k,v)=>{ const c=ghCfg(); c[k]=v.trim(); ghCfgSet(c); };
 function ghPanelHtml(){ return GH_PANEL&&window.jpPanelHtml ? window.jpPanelHtml() : ''; }
 window.ghSeed=async()=>{ if(GH.savePrepared&&!GH.locked){toast('Retry the interrupted save first.');return;}
@@ -314,7 +353,8 @@ function ghClock(id){
 async function ghLoadLimits(){
   GH.limit={};
   const c=ghCfg(), url=(typeof JP!=='undefined'&&JP.url)||c.url, key=(typeof JP!=='undefined'&&JP.key)||c.key;
-  if(DEMO||!GH.ext||GH.ext.src==='lex_import'||!url||!key||!GH.items.length) return;
+  if(DEMO||!GH.ext||GH.ext.src==='lex_import'||!url||!key||!GH.items.length||
+     window.WTOffline&&WTOffline.shouldQueue())return;
   const list=GH.items.map(ghKeyOf).filter(Boolean);
   const inList='('+list.map(k=>'"'+String(k).replace(/"/g,'')+'"').join(',')+')';
   try{
@@ -771,6 +811,49 @@ async function ghSaveNow(){
     const a=await ask({title:unmarked+' item'+(unmarked===1?' is':'s are')+' unmarked', body:'<p>Unmarked items are not saved. Mark the rest ✓, save only the '+rows.length+' you marked, or go back.</p>', ok:'Mark rest ✓ and save', alt:'Save '+rows.length+' only', cancel:'Go back'});
     if(!a) return;
     if(a===true){ ghRestPass(); return ghSaveNow(); }
+  }
+  /* Offline Hub/JP results use the same durable draft and stable IDs as
+     online saves, but are acknowledged only into the local pending queue.
+     The Pencil strokes are retained in that private pending record. */
+  if(!DEMO&&window.WTOffline&&WTOffline.shouldQueue()&&
+     (!GH.ext||GH.ext.src!=='lex_import')){
+    const owner=SESSION&&SESSION.user&&SESSION.user.id;
+    if(!owner){toast('Sign in online and download a study pack first.',7000);return;}
+    GH.sessionId=GH.sessionId||crypto.randomUUID();
+    GH.attemptTime=GH.attemptTime||new Date().toISOString();
+    GH.savePrepared=true;
+    try{
+      await ghDraftPersist();
+      const hub=!GH.ext||GH.ext.src==='hub';
+      const record={
+        id:'ghost-'+GH.sessionId,owner,kind:hub?'hub':'japanese',
+        createdAt:GH.attemptTime,
+        rows:hub?rows:[],
+        items:GH.items.filter(p=>GH.marks[p.id]).map(p=>({
+          id:p.id,topic_id:p.topic_id,prompt:p.prompt,answer:p.answer,
+          kanji:p.kanji||null,direction:ghDirOf(p),raw_mark:GH.marks[p.id],
+          seconds:ghSeconds(p.id)
+        })),
+        strokes:GH.strokes.map(({w,e,own,ox,oy,p})=>({w,e,own,ox,oy,p})),
+        marks:{...GH.marks}
+      };
+      await WTOffline.queue(record);
+      if(hub){
+        const saved=rows.map(r=>({...r,pending_local:true}));
+        const ids=new Set(saved.map(r=>r.id));
+        ATTEMPTS=[...saved,...ATTEMPTS.filter(r=>!ids.has(r.id))];
+      }
+    }catch(e){
+      toast('Local save incomplete — your handwriting is kept for retry: '+(e.message||e),8500);
+      return;
+    }
+    GH.savePrepared=false;ghDraftClear();ghLogSession();
+    toast('Saved on iPad · sync pending. Export the private backup from Settings.',7500);
+    const end=ghEnding(null);
+    if(!end){ghExit();return;}
+    GH.locked=true;$('gh-sheet').classList.add('locked');ghDrawer(true);
+    ghShowEnding(end);
+    return;
   }
   /* Imported lex-v1 compatible packs are intentionally device-only until
      a verified shared identity and approved evidence API exist. */
