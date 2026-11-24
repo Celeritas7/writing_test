@@ -9,6 +9,13 @@ Plain HTML, CSS and JavaScript — no build step. Data lives in Supabase.
 - **Install on a phone or iPad:** open the hosted page, then Share → *Add to Home Screen* (Safari) or *Install app* (Chrome). It opens full screen with its own icon, and after the first visit it starts even with no connection (your data still needs one).
 - **Local:** double-click `run-written-test-local.bat` (Windows, needs Python) or run `python -m http.server 5182` in this folder and open `http://localhost:5182/`.
 
+## Phase 3: Learning analytics
+
+From **Home → Learning trends** (or the desktop **Analytics** sidebar), see 7-, 30-, and 90-day activity, per-topic coverage, current weak/due questions and repeated mistakes. Cowork-graded, Quick Practice self-rated, and Hub Ghost Test results are shown separately—self-ratings are not treated as equivalent to independent grading. Each focus item can open a related practice topic or worksheet.
+
+Use **Refresh complete history** to retrieve more than the initial Supabase page of attempts; the app leaves existing data in place if retrieval fails or exceeds its 10,000-row limit. **Download text report** exports summary counts without reference answers or detailed feedback notes. Japanese Study's separate project and device-only Japanese Ghost sessions are deliberately excluded until a secure shared-history integration exists.
+
+See [Phase 3 acceptance checklist](docs/phase3-learning-analytics.md). This is still part of the pre-offline improvement sequence.
 ## Phase 2: Quick Practice
 
 From **Home → Quick Practice**, choose Due today (weak + due), Weak spots, New questions, or Random, optionally filter by subject/topic, and set a 5-, 10-, or 20-minute goal. Practise one Library question at a time, optionally type an answer, reveal the reference, and self-rate ✓ / △ / ✗. The session offers Pause/Resume, Previous/Next and Skip. The clock pauses when you leave or hide the tab; an interrupted draft resumes paused.
@@ -39,6 +46,7 @@ Full acceptance checklist: [docs/phase1-worksheet-grading.md](docs/phase1-worksh
 | **Library** | Subjects → topics → problems. Add, rename, reorder, edit, delete. Multi-line prompts. |
 | **Build a batch** | Ranks weak → due → new; problems already out in an ungraded batch drop to the bottom. Exports a PDF (+ manifest) to `outbox/`, or downloads both. Japanese and maths symbols print via an embedded Noto Sans JP subset. |
 | **Review** | Cowork feedback (filter by topic, batch, wrong only), batches you can open and mark solved/graded, ghost sheets as one card per session, "Practise again" and "Retry the wrong ones". |
+| **Analytics** | 7/30/90-day source-separated learning trends, current focus questions, coverage by topic, and downloadable summary reports. |
 | **Ghost test** | Write on screen; mark ✓ △ ✗ by tap-cycle or drag; per-word clock with a slow-but-correct half-step; results go to `japanese_user_reviews` (or `written_test_attempts` for hub topics). The sheet survives a reload for 7 days. Shortcuts: `?` lists them. |
 | **Settings** | **Account** first (who is signed in, Sign out, Install app), then the loop, folder link / reconnect and grader instructions. |
 
@@ -55,6 +63,8 @@ css/learning_hub.css       all styles (responsive rules in §8)
 js/learning_hub.js         auth, data, Home / Library / Build / Review / Settings, PDF export
 js/worksheet_handoff.js   manifest separation and deterministic grading IDs
 js/quick_practice.js     timed self-rating, draft recovery, safe attempt syncing
+js/learning_analytics.js  data-only calculations: dates, methods, repeated mistakes
+js/analytics_view.js      analytics charts, filters, refresh, reports and practice actions
 js/ghost_test.js           ghost test: sheet, ink, marking, clock, SRS, draft, session log
 js/japanese_source.js      Japanese-database panel: sets, modes, direction, streak
 fonts/NotoSansJP-Regular.ttf  subset font embedded in PDFs when needed (OFL)
