@@ -335,7 +335,13 @@ function ghSetMark(id, m){
     el.textContent=['','✓','△','✗'][m];
     el.className='gh-mk '+['','ok','mid','bad'][m];
     const n=cell.querySelector('.gh-n');
-    if(n) n.className='gh-n'+(m?' m'+m:'');
+    if(n){
+      n.className='gh-n'+(m?' m'+m:'');
+      const pos=GH.items.findIndex(p=>p.id===id)+1;
+      n.setAttribute('aria-label','Item '+pos+': '+
+        (['unmarked','correct','partly correct','wrong'][m]||'unmarked')+
+        '. Press to cycle the mark.');
+    }
   }
   ghScore(); ghDraftSave();
   if(m===3&&GH.seq) ghRequeue(id);
@@ -394,6 +400,28 @@ window.ghClearMarks=async()=>{
 
 /* ---- ink ---- */
 let ghCtx,ghCv,ghCur=null;
+function ghSyncA11yControls(){
+  const toggles={
+    '#gh-pen':GH.tool==='pen','#gh-erase':GH.tool==='erase',
+    '#gh-finger':!!GH.finger,'.gh-boxes-b':!!GH.boxes,
+    '.gh-paper-b':GH.paper==='plain'
+  };
+  for(const [selector,value] of Object.entries(toggles)){
+    const el=document.querySelector(selector);
+    if(el)el.setAttribute('aria-pressed',String(value));
+  }
+  document.querySelectorAll('.gh-ghost').forEach(el=>
+    el.setAttribute('aria-pressed',String(!!GH.ghost)));
+  const dock=document.querySelector('.gh-open');
+  if(dock)dock.setAttribute('aria-expanded',String(!!GH.drawer));
+  const more=document.querySelector('.gh-more');
+  if(more)more.setAttribute('aria-expanded',String(!!GH.more));
+  document.querySelectorAll('.gh-mk-b').forEach(el=>{
+    const brush=el.classList.contains('c1')?1:
+      el.classList.contains('c2')?2:el.classList.contains('c3')?3:0;
+    el.setAttribute('aria-pressed',String(GH.brush===brush));
+  });
+}
 function ghInit(){
   ghCv=$('gh-ink'); if(!ghCv) return; ghCtx=ghCv.getContext('2d');
   ghResize();
@@ -443,6 +471,7 @@ function ghInit(){
   if(!window._ghResizeBound){ window._ghResizeBound=1; addEventListener('resize',()=>ghResize()); }
   ghInitBrush();
   ghScore();
+  ghSyncA11yControls();
   ghStartClock();
   ghLoadLimits().then(()=>{ for(const p of GH.items) ghClock(p.id); });
 }
@@ -454,6 +483,7 @@ window.ghDrawer=on=>{
   GH.drawer=!!on;
   try{ localStorage.setItem('gh-drawer', GH.drawer?'1':'0'); }catch(e){}
   document.body.classList.toggle('gh-drawer-on', GH.drawer);
+  ghSyncA11yControls();
 };
 window.ghBoxes=()=>{
   GH.boxes=!GH.boxes;
@@ -461,6 +491,7 @@ window.ghBoxes=()=>{
   document.body.classList.toggle('gh-boxes', GH.boxes);
   const b=document.querySelector('.gh-boxes-b'); if(b) b.classList.toggle('on', GH.boxes);
   ghResizeSoon();   // box geometry changed, so the ink canvas has to re-fit
+  ghSyncA11yControls();
 };
 /* paper theme for the boxes: warm (default) or plain white. Purely cosmetic —
    the geometry is identical, so no canvas re-fit is needed. */
@@ -470,11 +501,13 @@ window.ghPaper=()=>{
   document.body.classList.toggle('gh-paper-plain', GH.paper==='plain');
   const b=document.querySelector('.gh-paper-b');
   if(b){ b.classList.toggle('on', GH.paper==='plain'); b.textContent = GH.paper==='plain' ? '□ Plain' : '▤ Grid'; }
+  ghSyncA11yControls();
 };
 window.ghMore=()=>{
   GH.more=!GH.more;
   document.body.classList.toggle('gh-more-on', GH.more);
   const b=document.querySelector('.gh-more'); if(b) b.classList.toggle('on', GH.more);
+  ghSyncA11yControls();
 };
 /* two-finger tap on the sheet = undo one stroke. Fires immediately, then
    repeats every 0.5s after a 0.6s hold. Cancelled by >12px of drift (that is
@@ -525,7 +558,10 @@ function ghUndoSeen(){ try{ localStorage.setItem('gh-undo-hint','1'); }catch(e){
    Pencil. Pencil always writes either way. */
 function ghApplyFinger(){
   if(ghCv) ghCv.style.touchAction = GH.finger ? 'none' : 'auto';
-  const b=$('gh-finger'); if(b) b.classList.toggle('on', !!GH.finger);
+  const b=$('gh-finger'); if(b){
+    b.classList.toggle('on', !!GH.finger);
+    b.setAttribute('aria-pressed',String(!!GH.finger));
+  }
 }
 window.ghFinger=()=>{
   GH.finger=!GH.finger;
@@ -607,7 +643,12 @@ function ghSeg(p,a,from){ const k=a[2]||1; ghCtx.beginPath(); ghCtx.moveTo(p[fro
 function ghStyle(s){ ghCtx.globalCompositeOperation=s.e?'destination-out':'source-over'; ghCtx.strokeStyle='#1a1a1a'; ghCtx.lineWidth=s.e?s.w*8:s.w; ghCtx.lineCap='round'; ghCtx.lineJoin='round'; }
 function ghPaint(s){ const a=ghAnchor(s); ghStyle(s); ghCtx.lineWidth*=a[2]||1; ghSeg(s.p,a,0); }
 function ghPos(e){ const r=ghCv.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
-window.ghTool=t=>{ GH.tool=t; $('gh-pen').classList.toggle('on',t==='pen'); $('gh-erase').classList.toggle('on',t==='erase'); };
+window.ghTool=t=>{
+  GH.tool=t;
+  $('gh-pen').classList.toggle('on',t==='pen');
+  $('gh-erase').classList.toggle('on',t==='erase');
+  ghSyncA11yControls();
+};
 window.ghWidth=()=>{ GH.wi=(GH.wi+1)%3; $('gh-width').textContent='Width: '+['S','M','L'][GH.wi]; };
 window.ghUndo=()=>{
   if(GH.locked||GH.savePrepared)return toast('Finish saving this sheet before editing handwriting.',4500);
@@ -616,7 +657,12 @@ window.ghUndo=()=>{
 window.ghClear=async()=>{
   if(GH.locked||GH.savePrepared)return toast('Finish saving this sheet before editing handwriting.',4500);
   if(GH.strokes.length&&!await ask({title:'Erase all handwriting?', body:"<p>Your marks stay. This can't be undone.</p>", ok:'Erase ink', cancel:'Keep ink', danger:true})) return; GH.strokes=[]; ghRedraw(); ghDraftSave(); };
-window.ghToggle=()=>{ GH.ghost=!GH.ghost; $('gh-sheet').classList.toggle('ghost-on',GH.ghost); document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost)); };
+window.ghToggle=()=>{
+  GH.ghost=!GH.ghost;
+  $('gh-sheet').classList.toggle('ghost-on',GH.ghost);
+  document.querySelectorAll('.gh-ghost').forEach(b=>b.classList.toggle('on',GH.ghost));
+  ghSyncA11yControls();
+};
 /* running tally per word: japanese_user_reviews (correct_count, wrong_count, last_rating, next_review) */
 /* ladder: 1,2,4,8,16,30,60,120 days — ✓ step+1, △ step-1 (min 1), ✗ step 0 (retry same session) */
 const SRS=[0,1,2,4,8,16,30,60,120];
