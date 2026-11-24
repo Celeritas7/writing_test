@@ -712,12 +712,23 @@ function renderSetup(){
         <div class="step"><div>Run <span class="mono">sql/schema.sql</span> in the Supabase SQL editor (adds tiers, kinds and batch tracking).</div></div>
         <div class="step"><div>Create a folder in <b>iCloud Drive</b>, e.g. <span class="mono">iCloud Drive/WrittenTest</span>, then link it here: <div style="margin-top:8px;display:flex;gap:10px;align-items:center">${DIR_PENDING&&!DIR?'<button class="btn sm" onclick="reconnectDir()">Reconnect '+esc(DIR_PENDING.name)+'</button>':''}<button class="btn sm ${DIR_PENDING&&!DIR?'ghost':''}" onclick="linkFolder()">${DIR?'Re-link folder':'Link folder'}</button><span class="mono" style="font-size:12px;color:${DIR?'var(--ok)':'var(--amber)'}">${DIR?'✓ linked: '+esc(DIR.name):DIR_PENDING?'needs one click to reconnect after reload':'Not linked yet'}</span></div>
           <div style="font-size:12.5px;color:var(--mute);margin-top:6px">The app creates <span class="mono">outbox/ · solved/ · graded/ · grader/</span> inside it and drops <span class="mono">COWORK_TASK.md</span> for the grader. Answers only ever go to <span class="mono">grader/</span>, never next to the sheet.</div></div></div>
-        <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it the task file the app just wrote (<span class="mono">COWORK_TASK.md</span> in the folder). Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
+        <div class="step"><div>Open <b>Claude Cowork</b> on your Mac and give it <span class="mono">COWORK_TASK.md</span>. If your folder was linked before this release, <button class="btn sm ghost" onclick="refreshGraderTask()">Update grading instructions</button> to enable the new retry-safe v2 workflow. Store the Supabase <b>service role key</b> at <span class="mono">~/.config/writtentest/service_role_key</span> — never inside the synced folder.</div></div>
         <div class="step"><div>On the iPad: Files app → iCloud Drive → WrittenTest. Solve PDFs from <span class="mono">outbox/</span> with the Pencil (Markup), then save them into <span class="mono">solved/</span>. In Review, confirm <b>I saved it in solved/</b>, then choose <b>Check feedback</b> after grading.</div></div><div class="step"><div><b>iPad Safari:</b> Direct folder linking is unavailable. Export the PDF and student-safe .json, move them to outbox/ with the Files app, and download the separate PRIVATE grader file only when needed. Keep that private key in grader/ (never outbox/). Refresh feedback after Cowork finishes.</div></div>
       </div>
     </div>
 `;
 }
+window.refreshGraderTask=async()=>{
+  try{
+    if(DIR){
+      await writeText(DIR,'COWORK_TASK.md',coworkTask());
+      toast('COWORK_TASK.md updated with the Phase 1 grading contract.',5500);
+    }else{
+      download(new Blob([coworkTask()],{type:'text/markdown;charset=utf-8'}),'COWORK_TASK.md');
+      toast('Grader task downloaded. Put it beside the grader/ folder on your PC; do not include the service key.',6500);
+    }
+  }catch(e){toast('Could not update grader instructions: '+(e.message||e),6500);}
+};
 window.linkFolder=linkFolder;
 
 /* ---------- folder ---------- */
