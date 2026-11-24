@@ -189,6 +189,16 @@ test('offline view refuses live batch/export and analytics update operations',()
   assert.match(hub,/if\(OFFLINE_MODE\)\{toast\('Changing batch status requires/);
   assert.match(analytics,/WTOffline\.isActive\(\)/);
 });
+test('optional third-party scripts cannot block cached app startup',()=>{
+  assert.match(index,/script async src="https:\/\/celeritas7.github.io\/Akatsuki/);
+  assert.match(index,/fonts.googleapis.com[^"\n]*" rel="stylesheet" media="print"/);
+  assert.match(hub,/maybeStartBroadcaster/);
+  assert.match(hub,/BROADCAST_STARTED/);
+});
+test('late live database replies cannot replace an opened offline workspace',()=>{
+  assert.match(hub,/async function boot\(\)\{\s*if\(OFFLINE_MODE\)return/);
+  assert.match(hub,/if\(OFFLINE_MODE\)return; \/\/ offline fallback may have started during the requests/);
+});
 test('all updated JavaScript parses',()=>{
   assert.doesNotThrow(()=>new Function(store));
   assert.doesNotThrow(()=>new Function(hub));
